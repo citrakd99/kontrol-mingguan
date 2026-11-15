@@ -174,7 +174,8 @@ function rowsFromCSV(text){
   for(let i=0;i<Math.min(g.length,15)&&hi<0;i++){const c={};
     g[i].forEach((h,j)=>{const k=String(h).trim().toLowerCase(); for(const f in ALIAS)if(!(f in c)&&ALIAS[f].includes(k))c[f]=j});
     if('name' in c&&'start' in c){hi=i;col=c}}
-  if(hi<0)throw new Error('Kolom "Pekerjaan" dan "Mulai" tidak ditemukan di baris judul.');
+  if(hi<0){const f=(g.find(r=>r.some(c=>String(c).trim()))||[]).map(c=>String(c).trim()).filter(Boolean).slice(0,10);
+    throw new Error('Kolom "Pekerjaan" dan "Mulai" tidak ditemukan di tab yang dibaca. Judul yang terbaca: '+(f.length?f.join(' | '):'(kosong)')+'. Buka tab daftar pekerjaan (Master) di Google Sheet, lalu salin link dari address bar saat tab itu aktif.')}
   const out=[];let skip=0;
   for(let i=hi+1;i<g.length;i++){const r=g[i],get=f=>f in col?String(r[col[f]]==null?'':r[col[f]]).trim():'';
     const name=get('name'); if(!name&&!get('start'))continue;
@@ -291,9 +292,14 @@ async function loadSheet(){
   if(!url){msg={lv:'crit',txt:'Link Google Sheet tidak dikenali. Tempel link lengkap dari address bar.'};render();return}
   busy=true;msg=null;render();
   try{
-    const res=await fetch(url); const text=await res.text();
-    if(!res.ok||/^\s*</.test(text))throw new Error('Sheet tidak bisa dibaca. Pastikan dibagikan ke "Siapa saja yang memiliki link" sebagai Pelihat.');
-    const r=rowsFromCSV(text); setData(r.rows,'Google Sheet');
+    const urls=url.includes('/gviz/')?[url.replace('/gviz/tq?tqx=out:csv&','/export?format=csv&'),url+'&headers=1']:[url];
+    let r=null,err=null;
+    for(const u of urls){try{
+      const res=await fetch(u); const text=await res.text();
+      if(!res.ok||/^\s*</.test(text))throw new Error('Sheet tidak bisa dibaca. Pastikan dibagikan ke "Siapa saja yang memiliki link" sebagai Pelihat.');
+      r=rowsFromCSV(text);break}catch(x){err=x}}
+    if(!r)throw err;
+    setData(r.rows,'Google Sheet');
     msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari Google Sheet'+(r.skip?', '+r.skip+' baris dilewati karena nama atau tanggal mulai kosong':'')+'.'};
   }catch(e){msg={lv:'crit',txt:e.message==='Failed to fetch'?'Sheet tidak bisa dijangkau. Periksa koneksi dan pastikan sheet dibagikan ke "Siapa saja yang memiliki link".':e.message}}
   busy=false;render();
