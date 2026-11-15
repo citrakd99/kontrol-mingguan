@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kontrol Mingguan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface2:#e9edf3; --line:#d3dae4; --fg:#18222e; --muted:#5b6878;
+  --accent:#1f5f8b; --accent-fg:#ffffff; --accent-soft:#dbe9f3;
+  --ok:#2c7a4b; --ok-soft:#dcefe3; --warn:#a8690a; --warn-soft:#f8ecd2; --crit:#b3362b; --crit-soft:#f8dedb; --idle:#b9c3d0;
+  --display:"Space Grotesk","Segoe UI",system-ui,sans-serif; --body:"Inter","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#11161d; --surface:#19212b; --surface2:#222c38; --line:#334050; --fg:#e6ebf2; --muted:#97a4b5;
+  --accent:#6fb1dc; --accent-fg:#0d1720; --accent-soft:#1f3546;
+  --ok:#62c088; --ok-soft:#1b3527; --warn:#e2ab4d; --warn-soft:#3a2e15; --crit:#ee7d72; --crit-soft:#40211e; --idle:#4a5868;
+  color-scheme:dark } }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-left:16px;padding-right:16px}
+header{position:sticky;top:0;z-index:9;background:var(--surface);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding-block:10px}
+h1{font-family:var(--display);font-size:18px;font-weight:600;margin:0;text-wrap:balance}
+h1 small{display:block;font-family:var(--body);font-size:12px;font-weight:400;color:var(--muted)}
+h2{font-family:var(--display);font-size:16px;font-weight:600;margin:0}
+.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+button{font:inherit;color:inherit;cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 12px}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tab[aria-selected="true"],.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.tab .n{display:inline-block;min-width:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;font-weight:600}
+.discbar{border-top:1px solid var(--line);background:var(--surface)}
+.discbar .wrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-block:8px}
+.discbar .lab{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+main.wrap{padding-block:18px 48px;display:flex;flex-direction:column;gap:18px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--display);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.kpi .s{font-size:12px;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.panel-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+.panel-h p{margin:0;color:var(--muted);font-size:12px}
+.scroll{overflow-x:auto}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+svg text{font-family:var(--body);fill:var(--muted);font-size:10px}
+.alerts{display:flex;flex-direction:column;gap:6px}
+.alert{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:8px 12px;border-radius:6px;border:1px solid var(--line)}
+.alert.crit{background:var(--crit-soft);border-color:var(--crit)}
+.alert.warn{background:var(--warn-soft);border-color:var(--warn)}
+.alert.ok{background:var(--ok-soft);border-color:var(--ok)}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;background:var(--surface2);color:var(--muted)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.crit{background:var(--crit-soft);color:var(--crit)} .pill.acc{background:var(--accent-soft);color:var(--accent)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;font-weight:600}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.num,th.num{text-align:right}
+.bar{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;min-width:90px}
+.bar span{display:block;height:100%;background:var(--ok)}
+.weeknav{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.weeknav h2{font-size:20px}
+select,input{font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+.spacer{flex:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.grp{font-family:var(--display);font-weight:600;font-size:13px;padding:10px 0 4px;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+.row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.row .id{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.row .nm{min-width:0}
+.row .nm b{font-weight:500}
+.row .nm small{display:block;color:var(--muted);font-size:12px}
+.row .meta{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:3px;align-items:center;font-size:12px;color:var(--muted)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.acts button{padding:5px 10px;font-size:13px}
+.b-ok[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.b-miss[aria-pressed="true"]{background:var(--crit);border-color:var(--crit);color:#fff}
+.b-flag[aria-pressed="true"]{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.row.s-ok{opacity:.72}
+.empty{color:var(--muted);padding:14px 0}
+.ind{display:grid;grid-template-columns:minmax(0,1.6fr) 96px 150px 150px minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label input,label select{width:100%;color:var(--fg)}
+details summary{cursor:pointer;font-weight:600}
+.cand{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)}
+.cand span{min-width:0}
+.note{font-size:12px;color:var(--muted);margin:0;max-width:80ch}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.form .wide{grid-column:1/-1}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+code{background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px}
+h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
+.btnrow label{min-width:200px}
+@media print{
+  :root{--bg:#fff;--surface:#fff;--surface2:#eceff3;--line:#c9d0da;--fg:#111;--muted:#444;--accent:#1f5f8b;--accent-fg:#fff;--accent-soft:#dbe9f3;
+    --ok:#2c7a4b;--ok-soft:#dcefe3;--warn:#a8690a;--warn-soft:#f8ecd2;--crit:#b3362b;--crit-soft:#f8dedb;--idle:#b9c3d0;color-scheme:light}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  header,.no-print,main>section:not(#v-rep){display:none!important}
+  body{font-size:11px} main.wrap{max-width:none;padding:0}
+  .panel{border:none;padding:0} .scroll{overflow:visible} svg{max-width:100%;height:auto}
+  tr,.kpi{break-inside:avoid} h3{break-after:avoid} thead{display:table-header-group}
+  th,td{padding:4px 6px}
+}
+@media (max-width:760px){
+  .row{grid-template-columns:40px minmax(0,1fr)} .acts{grid-column:1/-1;justify-content:flex-start}
+  .ind{grid-template-columns:1fr 1fr} .ind .wide{grid-column:1/-1}
+  .tabs{margin-left:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1><span id="h-title">Kontrol Mingguan</span><small id="h-sub"></small></h1>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-dash" data-view="dash">Dashboard</button>
+      <button class="tab" role="tab" id="tab-week" data-view="week">Kontrol Mingguan</button>
+      <button class="tab" role="tab" id="tab-ind" data-view="ind">Barang Indent<span class="n" id="ind-n" hidden></span></button>
+      <button class="tab" role="tab" id="tab-rep" data-view="rep">Laporan</button>
+      <button class="tab" role="tab" id="tab-set" data-view="set">Pengaturan</button>
+    </div>
+  </div>
+  <div class="discbar" id="discbar" hidden><div class="wrap" id="discchips"></div></div>
+</header>
+<main class="wrap">
+  <section id="v-dash"></section>
+  <section id="v-week" hidden></section>
+  <section id="v-ind" hidden></section>
+  <section id="v-rep" hidden></section>
+  <section id="v-set" hidden></section>
+</main>
+<input type="file" id="f-csv" accept=".csv,text/csv" hidden>
+<input type="file" id="f-json" accept=".json,application/json" hidden>
+
+<script>
+const BLN=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const MON={jan:1,feb:2,mar:3,apr:4,mei:5,may:5,jun:6,jul:7,agu:8,aug:8,agt:8,sep:9,okt:10,oct:10,nov:11,des:12,dec:12};
+const dn=(y,m,d)=>Math.floor(Date.UTC(y,m-1,d)/864e5);
+const n2d=n=>new Date(n*864e5);
+const fmt=n=>{const d=n2d(n);return String(d.getUTCDate()).padStart(2,'0')+' '+BLN[d.getUTCMonth()]+" '"+String(d.getUTCFullYear()).slice(2)};
+const n2iso=n=>n2d(n).toISOString().slice(0,10);
+const wl=w=>'W'+String(w).padStart(2,'0');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const $=id=>document.getElementById(id);
+const now=new Date(), TODAY=dn(now.getFullYear(),now.getMonth()+1,now.getDate());
+
+function parseDate(s){
+  s=String(s||'').trim(); if(!s)return null; let m;
+  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return dn(+m[1],+m[2],+m[3]);
+  if(m=s.match(/^(\d{1,2})[-\/ .](\d{1,2})[-\/ .](\d{2,4})$/)){const y=+m[3]<100?2000+ +m[3]:+m[3];return dn(y,+m[2],+m[1])}
+  if(m=s.match(/^(\d{1,2})[-\/ ]([A-Za-z]{3})[A-Za-z]*[-\/ ,']+(\d{2,4})$/)){const mo=MON[m[2].toLowerCase()];if(!mo)return null;const y=+m[3]<100?2000+ +m[3]:+m[3];return dn(y,mo,+m[1])}
+  if(m=s.match(/^([A-Za-z]{3})[A-Za-z]* (\d{1,2}),? '?(\d{2,4})$/)){const mo=MON[m[1].toLowerCase()];if(!mo)return null;const y=+m[3]<100?2000+ +m[3]:+m[3];return dn(y,mo,+m[2])}
+  return null;
+}
+function parseCSV(text){
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++} else q=false } else cur+=c }
+    else if(c==='"')q=true; else if(c===','){row.push(cur);cur=''}
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(cur);cur=''; rows.push(row);row=[] }
+    else cur+=c }
+  if(cur!==''||row.length){row.push(cur);rows.push(row)}
+  return rows;
+}
+const ALIAS={id:['id','no','no.'],disc:['disiplin','discipline','disciplin'],area:['area','gedung','lokasi','zona'],grp:['kelompok','kelompok pekerjaan','group','wbs','sub pekerjaan'],
+  name:['pekerjaan','task','task name','nama pekerjaan','uraian','uraian pekerjaan','item'],dur:['durasi','durasi (hari)','duration','hari'],start:['mulai','start','tanggal mulai'],end:['selesai','finish','end','tanggal selesai']};
+function rowsFromCSV(text){
+  const g=parseCSV(text.replace(/^﻿/,'')); let hi=-1,col={};
+  for(let i=0;i<Math.min(g.length,15)&&hi<0;i++){const c={};
+    g[i].forEach((h,j)=>{const k=String(h).trim().toLowerCase(); for(const f in ALIAS)if(!(f in c)&&ALIAS[f].includes(k))c[f]=j});
+    if('name' in c&&'start' in c){hi=i;col=c}}
+  if(hi<0)throw new Error('Kolom "Pekerjaan" dan "Mulai" tidak ditemukan di baris judul.');
+  const out=[];let skip=0;
+  for(let i=hi+1;i<g.length;i++){const r=g[i],get=f=>f in col?String(r[col[f]]==null?'':r[col[f]]).trim():'';
+    const name=get('name'); if(!name&&!get('start'))continue;
+    const s=parseDate(get('start')); if(!name||s==null){skip++;continue}
+    let dur=parseInt(get('dur'),10); const e=parseDate(get('end'));
+    if(isNaN(dur))dur=e!=null?Math.max(e-s+1,0):1;
+    out.push({id:get('id')||String(out.length+1),disc:normDisc(get('disc')),area:get('area')||'Umum',grp:get('grp'),name,s,dur});
+  }
+  if(!out.length)throw new Error('Tidak ada baris pekerjaan yang terbaca.');
+  return {rows:out,skip};
+}
+function normDisc(s){
+  s=String(s||'');
+  if(/mep|elek|elec|listrik|mekanik|mechan|hvac|plumb|fire|t&c|commission|dismantle/i.test(s))return 'MEP';
+  if(/csa|str|sipil|civil|ars|arch|persiapan|prelim/i.test(s))return 'CSA';
+  return 'Umum';
+}
+function sheetCsvUrl(link){
+  link=link.trim(); if(/\/pub\?/.test(link)&&/output=csv/.test(link))return link;
+  const m=link.match(/\/spreadsheets\/d\/([\w-]+)/); if(!m)return null;
+  const g=link.match(/[#?&]gid=(\d+)/);
+  return 'https://docs.google.com/spreadsheets/d/'+m[1]+'/gviz/tq?tqx=out:csv&gid='+(g?g[1]:'0');
+}
+function sampleRows(){
+  const w0=TODAY-((n2d(TODAY).getUTCDay()+6)%7)-7, r=(id,disc,area,grp,name,off,dur)=>({id:String(id),disc,area,grp,name,s:w0+off,dur});
+  return [r(1,'CSA','Gedung A','Persiapan','Mobilisasi dan direksi keet',0,6),r(2,'CSA','Gedung A','Struktur','Galian dan pondasi',5,14),r(3,'CSA','Gedung A','Struktur','Kolom dan balok lantai 1',17,21),
+    r(4,'CSA','Gedung A','Arsitektur','Pasangan dinding',33,18),r(5,'CSA','Gedung A','Arsitektur','Plester dan cat',47,16),r(6,'CSA','Gedung B','Baja','Fabrikasi rangka baja',7,21),
+    r(7,'CSA','Gedung B','Baja','Erection rangka baja',28,14),r(8,'CSA','Gedung B','Atap','Pasang penutup atap',42,10),r(9,'MEP','Gedung A','Elektrikal','Instalasi cable tray',21,20),
+    r(10,'MEP','Gedung A','Elektrikal','Pasang panel distribusi',45,5),r(11,'MEP','Gedung A','HVAC','Instalasi ducting',30,21),r(12,'MEP','Gedung B','Fire Protection','Instalasi pipa hydrant',24,24),
+    r(13,'MEP','Gedung B','HVAC','Pasang unit VRF',52,7),r(14,'MEP','Gedung A','Commissioning','Test dan commissioning',60,7)];
+}
+
+/* ---------- state ---------- */
+const K={cfg:'wc-cfg',data:'wc-data',st:'wc-state'};
+let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:''}, rows=[], src='', marks={}, indent={};
+let T=[], TB={}, W1=0, BASEW=1, CUR=1, AREAS=[], DISCS=[];
+let repFrom=0, repTo=0;
+let view='dash', selW=1, areaF='', discF='', confirmClose=false, confirmReset=false, msg=null, busy=false, C=null;
+const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let stTs=0, syncMsg='', pushT=null;
+const hm=()=>new Date().toTimeString().slice(0,5);
+const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,ts:stTs});schedulePush()};
+function schedulePush(){if(!cfg.sync)return;clearTimeout(pushT);pushT=setTimeout(push,1500)}
+async function push(){
+  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent})});
+    const o=await r.json();if(!o.ok)throw 0;syncMsg='tersimpan ke Google Sheet '+hm()}
+  catch(e){syncMsg='gagal simpan ke Google Sheet, data tetap ada di browser ini'}
+  sub();
+}
+async function pull(manual){
+  try{const r=await fetch(cfg.sync);const o=await r.json();
+    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};stTs=o.ts;sv(K.st,{marks,indent,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
+    else{syncMsg='terhubung ke Google Sheet';if(stTs&&!(o&&o.ts>=stTs))push()}
+    if(manual)msg={lv:'ok',txt:'Terhubung. Tandaan dan barang indent sekarang ikut tersimpan ke Google Sheet.'}}
+  catch(e){syncMsg='Google Sheet tidak terjangkau';if(manual)msg={lv:'crit',txt:'URL Apps Script tidak bisa dijangkau. Pastikan sudah di-deploy sebagai Web app dengan akses "Anyone".'}}
+  render();
+}
+function sub(){$('h-sub').textContent=[cfg.client,T.length?T.length+' pekerjaan · '+wl(CUR)+' dari '+BASEW+' minggu':'belum ada jadwal',syncMsg].filter(Boolean).join(' · ')}
+function build(){
+  T=rows.map(r=>{const e=r.s+Math.max(r.dur,1)-1;return{...r,id:String(r.id),disc:normDisc(r.disc),e}});
+  TB=Object.fromEntries(T.map(t=>[t.id,t])); AREAS=[...new Set(T.map(t=>t.area))]; DISCS=['CSA','MEP'].filter(d=>T.some(t=>t.disc===d));
+  if(!T.length){W1=TODAY;BASEW=1;CUR=1;return}
+  const mn=Math.min(...T.map(t=>t.s)), mx=Math.max(...T.map(t=>t.e));
+  const c1=parseDate(cfg.w1); W1=c1!=null&&c1<=mx?c1:mn-((n2d(mn).getUTCDay()+6)%7);
+  for(const t of T){t.ps=weekOf(t.s);t.pe=weekOf(t.e)}
+  BASEW=weekOf(mx); CUR=Math.min(Math.max(weekOf(TODAY),1),BASEW);
+  if(!DISCS.includes(discF))discF=''; if(!AREAS.includes(areaF))areaF='';
+}
+const weekOf=n=>Math.max(1,Math.floor((n-W1)/7)+1), wkStart=w=>W1+7*(w-1), wkEnd=w=>W1+7*(w-1)+6;
+function setData(r,source){repFrom=repTo=0;rows=r;src=source;sv(K.data,{rows,src});build();selW=CUR}
+
+function compute(){
+  const TF=discF?T.filter(t=>t.disc===discF):T;
+  const byW={},base={};let maxW=BASEW,units=0,okU=0,missU=0,done=0,slipped=0,late=0;
+  const ar={};
+  for(const t of TF){
+    const need=t.pe-t.ps+1;let ok=0,miss=0;
+    for(let w=t.ps;w<=t.pe;w++)base[w]=(base[w]||0)+1;
+    for(let w=t.ps;w<=t.pe+miss&&w<=BASEW+60;w++){
+      const m=(marks[w]||{})[t.id]||'';
+      if(m==='ok')ok++;else if(m==='miss')miss++;else if(w<CUR)late++;
+      (byW[w]||(byW[w]=[])).push({t,m,carry:w>t.pe});
+    }
+    t.ok=ok;t.miss=miss;t.need=need;t.done=ok>=need;t.end=t.pe+miss;
+    if(t.end>maxW)maxW=t.end;
+    units+=need;okU+=ok;missU+=miss;if(t.done)done++;if(miss)slipped++;
+    const a=ar[t.area]||(ar[t.area]={n:0,done:0,u:0,ok:0,slip:0});a.n++;a.u+=need;a.ok+=ok;if(t.done)a.done++;if(miss)a.slip++;
+  }
+  let planU=0;for(let w=1;w<=CUR;w++)planU+=base[w]||0;
+  C={TF,byW,base,maxW,units,okU,missU,done,slipped,late,ar,planU};
+}
+function indAlert(it){
+  if(it.status==='tiba')return{lv:'',txt:'Sudah tiba di lokasi',ok:true};
+  const need=parseDate(it.need); if(need==null)return{lv:'',txt:'Tanggal butuh belum diisi'};
+  if(it.status==='belum'){const ob=need-it.lead*7,d=ob-TODAY;
+    if(d<0)return{lv:'crit',txt:'Terlambat pesan '+(-d)+' hari (batas '+fmt(ob)+')'};
+    if(d<=14)return{lv:'warn',txt:'Pesan paling lambat '+fmt(ob)+' ('+d+' hari lagi)'};
+    return{lv:'',txt:'Batas pesan '+fmt(ob)}}
+  const d=need-TODAY;
+  if(d<0)return{lv:'crit',txt:'Belum tiba, lewat '+(-d)+' hari dari kebutuhan'};
+  if(d<=14)return{lv:'warn',txt:'Harus tiba dalam '+d+' hari'};
+  return{lv:'',txt:'Sudah PO, dibutuhkan '+fmt(need)};
+}
+const indList=()=>Object.entries(indent).map(([id,it])=>({id,...it,al:indAlert(it),t:TB[it.task]}))
+  .filter(i=>!discF||!i.t||i.t.disc===discF).sort((a,b)=>(a.need<b.need?-1:1));
+
+/* ---------- aksi ---------- */
+function setMark(w,id,v){const m=marks[w]||(marks[w]={});if(m[id]===v)delete m[id];else m[id]=v;saveState();render()}
+function bulk(w,v){const m=marks[w]||(marks[w]={});for(const x of (C.byW[w]||[])){if(areaF&&x.t.area!==areaF)continue;if(m[x.t.id])continue;m[x.t.id]=v}saveState();render()}
+function flag(tid){const id='t'+tid;if(indent[id])delete indent[id];else{const t=TB[tid];indent[id]={name:t.name,task:tid,lead:cfg.lead,need:n2iso(t.s),status:'belum'}}saveState();render()}
+async function loadSheet(){
+  const url=sheetCsvUrl(cfg.sheet||'');
+  if(!url){msg={lv:'crit',txt:'Link Google Sheet tidak dikenali. Tempel link lengkap dari address bar.'};render();return}
+  busy=true;msg=null;render();
+  try{
+    const res=await fetch(url); const text=await res.text();
+    if(!res.ok||/^\s*</.test(text))throw new Error('Sheet tidak bisa dibaca. Pastikan dibagikan ke "Siapa saja yang memiliki link" sebagai Pelihat.');
+    const r=rowsFromCSV(text); setData(r.rows,'Google Sheet');
+    msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari Google Sheet'+(r.skip?', '+r.skip+' baris dilewati karena nama atau tanggal mulai kosong':'')+'.'};
+  }catch(e){msg={lv:'crit',txt:e.message==='Failed to fetch'?'Sheet tidak bisa dijangkau. Periksa koneksi dan pastikan sheet dibagikan ke "Siapa saja yang memiliki link".':e.message}}
+  busy=false;render();
+}
+function readFile(f,cb){const r=new FileReader();r.onload=()=>cb(String(r.result));r.readAsText(f)}
+
+/* ---------- tampilan ---------- */
+function chart(){
+  const n=C.maxW,W=Math.max(720,n*26+60),H=230,L=34,B=26,top=10,ph=H-B-top;
+  let mx=4;for(let w=1;w<=n;w++)mx=Math.max(mx,(C.byW[w]||[]).length,C.base[w]||0);
+  const step=mx<=8?2:mx<=20?5:mx<=40?10:20; mx=Math.ceil(mx/step)*step; const bw=(W-L-8)/n,y=v=>top+ph-v/mx*ph;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Beban pekerjaan per minggu">';
+  for(let v=0;v<=mx;v+=step)s+='<line x1="'+L+'" x2="'+(W-8)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="var(--line)" stroke-width="1"/><text x="'+(L-6)+'" y="'+(y(v)+3)+'" text-anchor="end">'+v+'</text>';
+  for(let w=1;w<=n;w++){
+    const it=C.byW[w]||[],ok=it.filter(x=>x.m==='ok').length,ms=it.filter(x=>x.m==='miss').length,rest=it.length-ok-ms;
+    const x=L+(w-1)*bw+3,ww=bw-6;let yy=y(0);
+    if(w===CUR)s+='<rect x="'+(x-3)+'" y="'+top+'" width="'+bw+'" height="'+ph+'" fill="var(--accent-soft)"/>';
+    for(const [v,c] of [[ok,'var(--ok)'],[ms,'var(--crit)'],[rest,'var(--idle)']]){if(!v)continue;const h=v/mx*ph;yy-=h;s+='<rect x="'+x+'" y="'+yy+'" width="'+ww+'" height="'+h+'" fill="'+c+'"><title>'+wl(w)+': '+v+'</title></rect>'}
+    const b=C.base[w]||0;if(b)s+='<line x1="'+(x-2)+'" x2="'+(x+ww+2)+'" y1="'+y(b)+'" y2="'+y(b)+'" stroke="var(--fg)" stroke-width="2"/>';
+    s+='<text x="'+(x+ww/2)+'" y="'+(H-10)+'" text-anchor="middle"'+(w===CUR?' style="fill:var(--accent);font-weight:600"':'')+'>'+w+'</text>';
+  }
+  return s+'</svg>';
+}
+const noData=()=>'<div class="panel"><h2>Belum ada jadwal</h2><p class="note">Tempel link Google Sheet berisi daftar pekerjaan di Pengaturan, atau coba dulu dengan data contoh.</p><div class="btnrow"><button class="primary" data-view="set">Buka Pengaturan</button><button id="s-sample">Muat data contoh</button></div></div>';
+function vDash(){
+  if(!T.length)return noData();
+  const cw=C.byW[CUR]||[],cok=cw.filter(x=>x.m==='ok').length,al=indList().filter(i=>i.al.lv),slipW=C.maxW-BASEW;
+  let h='<div class="kpis">'
+   +'<div class="kpi"><div class="l">Progres aktual</div><div class="v">'+pct(C.okU,C.units)+'%</div><div class="s">rencana s/d '+wl(CUR)+': '+pct(C.planU,C.units)+'%</div></div>'
+   +'<div class="kpi"><div class="l">PPC minggu ini ('+wl(CUR)+')</div><div class="v">'+pct(cok,cw.length)+'%</div><div class="s">'+cok+' dari '+cw.length+' target tercapai</div></div>'
+   +'<div class="kpi"><div class="l">Pekerjaan selesai</div><div class="v">'+C.done+'<span style="font-size:15px;color:var(--muted)"> / '+C.TF.length+'</span></div><div class="s">'+C.okU+' dari '+C.units+' target mingguan</div></div>'
+   +'<div class="kpi"><div class="l">Pekerjaan tergeser</div><div class="v">'+C.slipped+'</div><div class="s">'+C.missU+' target digeser ke minggu berikut</div></div>'
+   +'<div class="kpi"><div class="l">Proyeksi selesai</div><div class="v">'+wl(C.maxW)+'</div><div class="s">'+(slipW>0?'mundur '+slipW+' minggu dari baseline '+wl(BASEW):'sesuai baseline '+wl(BASEW))+'</div></div></div>';
+  const a=[];
+  if(C.late)a.push('<div class="alert warn"><b>'+C.late+' target di minggu lalu belum ditandai.</b><span>Buka minggunya lalu tandai atau tutup minggu supaya sisanya digeser.</span></div>');
+  for(const i of al)a.push('<div class="alert '+i.al.lv+'"><span class="pill '+i.al.lv+'">Indent</span><b>'+esc(i.name)+'</b><span>'+esc(i.al.txt)+'</span></div>');
+  if(a.length)h+='<div class="alerts" style="margin-top:14px">'+a.join('')+'</div>';
+  h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Beban pekerjaan per minggu'+(discF?' · '+esc(discF):'')+'</h2><p>Jumlah target mingguan yang aktif. Target yang tidak tercapai menambah beban minggu sesudahnya.</p></div>'
+   +'<div class="legend"><span><i style="background:var(--ok)"></i>Tercapai</span><span><i style="background:var(--crit)"></i>Tidak tercapai</span><span><i style="background:var(--idle)"></i>Belum ditandai</span><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>Rencana awal</span><span><i style="background:var(--accent-soft)"></i>Minggu ini</span></div>'
+   +'<div class="scroll">'+chart()+'</div></div>';
+  h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Pencapaian per area</h2></div><div class="scroll"><table><thead><tr><th>Area</th><th class="num">Pekerjaan</th><th class="num">Selesai</th><th class="num">Tergeser</th><th>Progres</th><th class="num">%</th></tr></thead><tbody>';
+  for(const k of AREAS){const r=C.ar[k];if(!r)continue;h+='<tr><td>'+esc(k)+'</td><td class="num">'+r.n+'</td><td class="num">'+r.done+'</td><td class="num">'+(r.slip?'<span class="pill crit">'+r.slip+'</span>':'0')+'</td><td><div class="bar"><span style="width:'+pct(r.ok,r.u)+'%"></span></div></td><td class="num">'+pct(r.ok,r.u)+'%</td></tr>'}
+  h+='</tbody></table></div></div>';
+  const sl=C.TF.filter(t=>t.miss).sort((x,y)=>y.miss-x.miss).slice(0,12);
+  if(sl.length)h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Pekerjaan paling banyak bergeser</h2></div><div class="scroll"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Disiplin</th><th>Area</th><th class="num">Geser</th><th>Selesai baru</th></tr></thead><tbody>'
+    +sl.map(t=>'<tr><td>'+esc(t.id)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.disc)+'</td><td>'+esc(t.area)+'</td><td class="num">+'+t.miss+' mgg</td><td>'+wl(t.end)+' (awal '+wl(t.pe)+')</td></tr>').join('')+'</tbody></table></div></div>';
+  return h;
+}
+function vWeek(){
+  if(!T.length)return noData();
+  const w=selW,all=C.byW[w]||[],it=areaF?all.filter(x=>x.t.area===areaF):all;
+  const ok=all.filter(x=>x.m==='ok').length,ms=all.filter(x=>x.m==='miss').length,cr=all.filter(x=>x.carry).length;
+  let opts='';for(let i=1;i<=C.maxW;i++)opts+='<option value="'+i+'"'+(i===w?' selected':'')+'>'+wl(i)+' · '+fmt(wkStart(i))+' - '+fmt(wkEnd(i))+(i===CUR?' (minggu ini)':'')+'</option>';
+  let h='<div class="weeknav"><button id="w-prev" aria-label="Minggu sebelumnya"'+(w<=1?' disabled':'')+'>‹</button><h2>'+wl(w)+'</h2><select id="w-sel" aria-label="Pilih minggu">'+opts+'</select><button id="w-next" aria-label="Minggu berikutnya"'+(w>=C.maxW?' disabled':'')+'>›</button>'
+   +(w===CUR?'<span class="pill acc">Minggu ini</span>':'<button id="w-cur">Ke minggu ini</button>')+'<span class="spacer"></span>'
+   +(confirmClose?'<span>Geser semua yang belum ditandai?</span><button id="w-close-yes" class="b-miss" aria-pressed="true">Ya, geser</button><button id="w-close-no">Batal</button>'
+     :'<button id="w-allok">Tandai sisanya tercapai</button><button id="w-close">Tutup minggu</button>')+'</div>';
+  h+='<div class="kpis" style="margin-top:12px">'
+   +'<div class="kpi"><div class="l">Beban minggu ini</div><div class="v">'+all.length+'</div><div class="s">rencana awal '+(C.base[w]||0)+', geseran masuk '+cr+'</div></div>'
+   +'<div class="kpi"><div class="l">Tercapai</div><div class="v" style="color:var(--ok)">'+ok+'</div><div class="s">PPC '+pct(ok,all.length)+'%</div></div>'
+   +'<div class="kpi"><div class="l">Tidak tercapai</div><div class="v" style="color:var(--crit)">'+ms+'</div><div class="s">digeser ke minggu sesudahnya</div></div>'
+   +'<div class="kpi"><div class="l">Belum ditandai</div><div class="v">'+(all.length-ok-ms)+'</div><div class="s">'+fmt(wkStart(w))+' s/d '+fmt(wkEnd(w))+'</div></div></div>';
+  const cnt={};for(const x of all)cnt[x.t.area]=(cnt[x.t.area]||0)+1;
+  h+='<div class="chips" style="margin-top:14px"><button class="chip" data-area="" aria-pressed="'+(!areaF)+'">Semua area ('+all.length+')</button>'+AREAS.filter(a=>cnt[a]).map(a=>'<button class="chip" data-area="'+esc(a)+'" aria-pressed="'+(areaF===a)+'">'+esc(a)+' ('+cnt[a]+')</button>').join('')+'</div>';
+  h+='<div class="panel" style="margin-top:14px;gap:0">';
+  if(!it.length)h+='<div class="empty">Tidak ada pekerjaan terjadwal di minggu ini'+(discF?' untuk disiplin '+esc(discF):'')+'.</div>';
+  let last=null;
+  for(const x of it){const t=x.t;
+    if(t.area!==last){h+='<div class="grp">'+esc(t.area)+'</div>';last=t.area}
+    const tags=['<span class="pill">'+esc(t.disc)+'</span>'];
+    if(x.carry)tags.push('<span class="pill crit">Geseran +'+(w-t.pe)+' mgg</span>');
+    if(t.dur===0)tags.push('<span class="pill acc">Milestone</span>');
+    else{if(w===t.ps)tags.push('<span class="pill acc">Mulai</span>');if(w===t.end)tags.push('<span class="pill">Target selesai</span>')}
+    if(t.done)tags.push('<span class="pill ok">Selesai</span>');
+    h+='<div class="row'+(x.m==='ok'?' s-ok':'')+'"><div class="id">'+esc(t.id)+'</div><div class="nm"><b>'+esc(t.name)+'</b>'+(t.grp?'<small>'+esc(t.grp)+'</small>':'')
+     +'<div class="meta">'+tags.join('')+'<span>Rencana '+fmt(t.s)+' - '+fmt(t.e)+' ('+t.dur+' hari)</span><span>· '+t.ok+'/'+t.need+' minggu tercapai</span></div></div>'
+     +'<div class="acts"><button class="b-ok" data-ok="'+esc(t.id)+'" aria-pressed="'+(x.m==='ok')+'">Tercapai</button><button class="b-miss" data-miss="'+esc(t.id)+'" aria-pressed="'+(x.m==='miss')+'">Tidak, geser</button><button class="b-flag" data-flag="'+esc(t.id)+'" aria-pressed="'+(!!indent['t'+t.id])+'" title="Tandai sebagai barang indent">Indent</button></div></div>';
+  }
+  return h+'</div>';
+}
+const KW=/panel|MDB|trafo|genset|VRF|chiller|AHU|fan\b|pump|pompa|tank|tangki|shutter|automatic|otomatis|ACP|kaca|cubicle|hydrant|high bay|compress|lift|elevator|baja|steel/i;
+function vInd(){
+  const il=indList();
+  let h='<div class="panel"><div class="panel-h"><h2>Barang indent yang dipantau</h2><p>Batas pesan = tanggal butuh di lokasi dikurangi lead time. Peringatan muncul 14 hari sebelum batas.</p><span class="spacer"></span><button id="ind-add">Tambah barang</button></div>';
+  if(!il.length)h+='<div class="empty">Belum ada barang yang ditandai. Tandai dari daftar kandidat di bawah, dari tombol Indent di Kontrol Mingguan, atau tambah manual.</div>';
+  for(const i of il){
+    h+='<div class="ind"><label class="wide">Barang'+(i.t?' · ID '+esc(i.t.id)+' ('+esc(i.t.disc)+', '+esc(i.t.area)+')':'')+'<input data-ind="'+i.id+'" data-f="name" value="'+esc(i.name)+'"></label>'
+     +'<label>Lead time (mgg)<input type="number" min="0" max="80" data-ind="'+i.id+'" data-f="lead" value="'+i.lead+'"></label>'
+     +'<label>Butuh di lokasi<input type="date" data-ind="'+i.id+'" data-f="need" value="'+esc(i.need)+'"></label>'
+     +'<label>Status<select data-ind="'+i.id+'" data-f="status"><option value="belum"'+(i.status==='belum'?' selected':'')+'>Belum PO</option><option value="po"'+(i.status==='po'?' selected':'')+'>Sudah PO</option><option value="tiba"'+(i.status==='tiba'?' selected':'')+'>Sudah tiba</option></select></label>'
+     +'<div class="wide"><span class="pill '+(i.al.lv||(i.al.ok?'ok':''))+'">'+esc(i.al.txt)+'</span></div>'
+     +'<button data-del="'+i.id+'">Hapus</button></div>';
+  }
+  h+='<p class="note">Lead time awal diambil dari Pengaturan ('+cfg.lead+' minggu). Ganti per barang sesuai penawaran vendor.</p></div>';
+  const cand=(C.TF||[]).filter(t=>KW.test(t.name)&&!indent['t'+t.id]&&!t.done);
+  if(cand.length)h+='<div class="panel" style="margin-top:18px"><details id="d-cand"><summary>Kandidat dari jadwal ('+cand.length+')</summary><p class="note" style="margin:8px 0">Saran berdasarkan kata kunci di nama pekerjaan (panel, trafo, VRF, fan, pompa, tangki, ACP, kaca, baja dan sejenisnya).</p>'
+    +cand.map(t=>'<div class="cand"><span><b>'+esc(t.name)+'</b> <small style="color:var(--muted)">ID '+esc(t.id)+' · '+esc(t.disc)+' · '+esc(t.area)+' · mulai '+fmt(t.s)+'</small></span><button data-flag="'+esc(t.id)+'">Tandai</button></div>').join('')+'</details></div>';
+  return h;
+}
+function vRep(){
+  if(!T.length)return noData();
+  if(!repFrom)repFrom=repTo=CUR;
+  repFrom=Math.min(Math.max(repFrom,1),C.maxW); repTo=Math.min(Math.max(repTo,repFrom),C.maxW);
+  const opt=s=>{let o='';for(let i=1;i<=C.maxW;i++)o+='<option value="'+i+'"'+(i===s?' selected':'')+'>'+wl(i)+' · '+fmt(wkStart(i))+' - '+fmt(wkEnd(i))+'</option>';return o};
+  const its=[];for(let w=repFrom;w<=repTo;w++)for(const x of (C.byW[w]||[]))its.push(x);
+  const ok=its.filter(x=>x.m==='ok').length,ms=its.filter(x=>x.m==='miss').length,slipW=C.maxW-BASEW;
+  const per=repFrom===repTo?wl(repFrom):wl(repFrom)+' s/d '+wl(repTo);
+  let h='<div class="panel no-print"><div class="panel-h"><h2>Laporan</h2><p>Pilih periode, lalu cetak. Di dialog cetak pilih "Save as PDF" untuk menyimpan sebagai PDF. Filter disiplin di atas ikut berlaku.</p></div>'
+   +'<div class="btnrow"><label>Dari minggu<select id="r-from">'+opt(repFrom)+'</select></label><label>Sampai minggu<select id="r-to">'+opt(repTo)+'</select></label><span class="spacer"></span><button class="primary" id="r-print">Cetak / Simpan PDF</button></div></div>';
+  h+='<div class="panel rep" style="margin-top:18px"><div><h2 style="font-size:20px">Laporan Kontrol Mingguan'+(cfg.project?' · '+esc(cfg.project):'')+'</h2>'
+   +'<p class="note">'+(cfg.client?'Client: '+esc(cfg.client)+' · ':'')+'Periode '+per+' ('+fmt(wkStart(repFrom))+' s/d '+fmt(wkEnd(repTo))+') · Disiplin: '+(discF?esc(discF):'Semua')+' · Dicetak '+fmt(TODAY)+'</p></div>';
+  h+='<h3>Ringkasan</h3><div class="kpis">'
+   +'<div class="kpi"><div class="l">PPC periode</div><div class="v">'+pct(ok,its.length)+'%</div><div class="s">'+ok+' dari '+its.length+' target tercapai</div></div>'
+   +'<div class="kpi"><div class="l">Tidak tercapai</div><div class="v">'+ms+'</div><div class="s">digeser ke minggu sesudahnya</div></div>'
+   +'<div class="kpi"><div class="l">Belum ditandai</div><div class="v">'+(its.length-ok-ms)+'</div><div class="s">dalam periode ini</div></div>'
+   +'<div class="kpi"><div class="l">Progres keseluruhan</div><div class="v">'+pct(C.okU,C.units)+'%</div><div class="s">rencana s/d '+wl(CUR)+': '+pct(C.planU,C.units)+'%</div></div>'
+   +'<div class="kpi"><div class="l">Pekerjaan selesai</div><div class="v">'+C.done+' / '+C.TF.length+'</div><div class="s">'+C.slipped+' pekerjaan tergeser</div></div>'
+   +'<div class="kpi"><div class="l">Proyeksi selesai</div><div class="v">'+wl(C.maxW)+'</div><div class="s">'+(slipW>0?'mundur '+slipW+' minggu dari '+wl(BASEW):'sesuai baseline '+wl(BASEW))+'</div></div></div>';
+  h+='<h3>Beban pekerjaan per minggu</h3><div class="legend"><span><i style="background:var(--ok)"></i>Tercapai</span><span><i style="background:var(--crit)"></i>Tidak tercapai</span><span><i style="background:var(--idle)"></i>Belum ditandai</span><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>Rencana awal</span></div><div class="scroll">'+chart()+'</div>';
+  const ar={};for(const x of its){const a=ar[x.t.area]||(ar[x.t.area]={n:0,ok:0,ms:0});a.n++;if(x.m==='ok')a.ok++;if(x.m==='miss')a.ms++}
+  h+='<h3>Pencapaian per area, periode '+per+'</h3><div class="scroll"><table><thead><tr><th>Area</th><th class="num">Target</th><th class="num">Tercapai</th><th class="num">Tidak tercapai</th><th class="num">Belum ditandai</th><th class="num">PPC</th></tr></thead><tbody>'
+   +AREAS.filter(a=>ar[a]).map(a=>{const r=ar[a];return '<tr><td>'+esc(a)+'</td><td class="num">'+r.n+'</td><td class="num">'+r.ok+'</td><td class="num">'+r.ms+'</td><td class="num">'+(r.n-r.ok-r.ms)+'</td><td class="num">'+pct(r.ok,r.n)+'%</td></tr>'}).join('')+'</tbody></table></div>';
+  for(let w=repFrom;w<=repTo;w++){const l=C.byW[w]||[],o=l.filter(x=>x.m==='ok').length;
+    h+='<h3>Kontrol mingguan '+wl(w)+' ('+fmt(wkStart(w))+' s/d '+fmt(wkEnd(w))+') · '+o+' dari '+l.length+' tercapai</h3>';
+    if(!l.length){h+='<p class="note">Tidak ada pekerjaan terjadwal.</p>';continue}
+    h+='<div class="scroll"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Disiplin</th><th>Area</th><th>Rencana</th><th>Status</th></tr></thead><tbody>'
+     +l.map(x=>'<tr><td>'+esc(x.t.id)+'</td><td>'+esc(x.t.name)+(x.t.grp?'<br><small style="color:var(--muted)">'+esc(x.t.grp)+'</small>':'')+'</td><td>'+esc(x.t.disc)+'</td><td>'+esc(x.t.area)+'</td><td style="white-space:nowrap">'+fmt(x.t.s)+' - '+fmt(x.t.e)+'</td><td>'
+       +(x.m==='ok'?'<span class="pill ok">Tercapai</span>':x.m==='miss'?'<span class="pill crit">Tidak tercapai, digeser</span>':'<span class="pill">Belum ditandai</span>')+(x.carry?' <span class="pill warn">Geseran +'+(w-x.t.pe)+' mgg</span>':'')+'</td></tr>').join('')+'</tbody></table></div>';
+  }
+  const il=indList();
+  h+='<h3>Barang indent</h3>';
+  if(!il.length)h+='<p class="note">Belum ada barang indent yang ditandai.</p>';
+  else h+='<div class="scroll"><table><thead><tr><th>Barang</th><th class="num">Lead time</th><th>Butuh di lokasi</th><th>Status</th><th>Peringatan</th></tr></thead><tbody>'
+    +il.map(i=>{const n=parseDate(i.need);return '<tr><td>'+esc(i.name)+'</td><td class="num">'+i.lead+' mgg</td><td>'+(n!=null?fmt(n):'-')+'</td><td>'+({belum:'Belum PO',po:'Sudah PO',tiba:'Sudah tiba'}[i.status]||'')+'</td><td><span class="pill '+(i.al.lv||(i.al.ok?'ok':''))+'">'+esc(i.al.txt)+'</span></td></tr>'}).join('')+'</tbody></table></div>';
+  return h+'</div>';
+}
+function vSet(){
+  let h='';
+  if(msg)h+='<div class="alert '+msg.lv+'" style="margin-bottom:14px">'+esc(msg.txt)+'</div>';
+  h+='<div class="panel"><div class="panel-h"><h2>Identitas</h2><p>Hanya tersimpan di browser ini.</p></div><div class="form">'
+   +'<label>Nama project<input id="c-project" data-cfg="project" value="'+esc(cfg.project)+'" placeholder="mis. Pembangunan Gudang A"></label>'
+   +'<label>Nama client<input id="c-client" data-cfg="client" value="'+esc(cfg.client)+'" placeholder="mis. PT Contoh"></label>'
+   +'<label>Lead time awal barang indent (minggu)<input id="c-lead" type="number" min="0" max="80" data-cfg="lead" value="'+cfg.lead+'"></label>'
+   +'<label>Tanggal mulai minggu 1 (opsional)<input id="c-w1" type="date" data-cfg="w1" value="'+esc(cfg.w1)+'"></label></div>'
+   +'<p class="note">Jika tanggal mulai minggu 1 dikosongkan, minggu 1 dimulai hari Senin pada minggu pekerjaan paling awal. Pekerjaan sebelum tanggal itu masuk ke minggu 1.</p></div>';
+  h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Sumber jadwal</h2><p>'+(T.length?T.length+' pekerjaan dimuat dari '+esc(src)+', '+DISCS.length+' disiplin, '+BASEW+' minggu.':'Belum ada jadwal dimuat.')+'</p></div>'
+   +'<div class="form"><label class="wide">Link Google Sheet<input id="c-sheet" data-cfg="sheet" value="'+esc(cfg.sheet)+'" placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=0"></label></div>'
+   +'<div class="btnrow"><button class="primary" id="s-load"'+(busy?' disabled':'')+'>'+(busy?'Memuat…':'Muat dari Google Sheet')+'</button><button id="s-csv">Unggah file CSV</button><button id="s-sample">Muat data contoh</button></div>'
+   +'<p class="note">Sheet harus dibagikan ke "Siapa saja yang memiliki link" sebagai Pelihat. Tab yang dibaca adalah tab pada link (<code>gid</code>), dengan satu baris judul berisi kolom: <code>ID</code>, <code>Disiplin</code>, <code>Area</code>, <code>Kelompok</code>, <code>Pekerjaan</code>, <code>Durasi</code>, <code>Mulai</code>, dan opsional <code>Selesai</code>. Wajib hanya <code>Pekerjaan</code> dan <code>Mulai</code>. Tanggal paling aman berformat <code>2026-11-03</code>; <code>03-Nov-26</code> dan <code>03/11/2026</code> (hari/bulan/tahun) juga terbaca. Durasi dihitung 7 hari per minggu.</p>'
+   +'<p class="note">Tandaan tercapai/geser mengikuti <code>ID</code> pekerjaan, jadi ID jangan diubah setelah mulai dipakai.</p></div>';
+  h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Simpan ke Google Sheet</h2><p>'+(cfg.sync?esc(syncMsg||'URL terpasang'):'Belum dihubungkan: tandaan hanya ada di browser ini.')+'</p></div>'
+   +'<div class="form"><label class="wide">URL Web app Apps Script<input id="c-sync" data-cfg="sync" value="'+esc(cfg.sync)+'" placeholder="https://script.google.com/macros/s/…/exec"></label></div>'
+   +'<div class="btnrow"><button id="s-sync"'+(cfg.sync?'':' disabled')+'>Hubungkan dan ambil data</button></div>'
+   +'<p class="note">Cara pasang: buka Google Sheet jadwal, menu Extensions &gt; Apps Script, tempel isi file <code>apps-script/Code.gs</code> dari repo ini, lalu Deploy &gt; New deployment &gt; Web app dengan "Execute as: Me" dan "Who has access: Anyone". Tempel URL yang berakhiran <code>/exec</code> di atas. Data disimpan di tab <code>KontrolData</code> pada sheet yang sama. Siapa pun yang memegang URL ini bisa membaca dan menimpa tandaan, jadi jangan dibagikan sembarangan.</p></div>';
+  h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Cadangan data</h2><p>Ekspor tandaan mingguan dan barang indent ke file, atau impor dari file cadangan.</p></div>'
+   +'<div class="btnrow"><button id="s-export">Ekspor tandaan (.json)</button><button id="s-import">Impor tandaan</button><span class="spacer"></span>'
+   +(confirmReset?'<span>Hapus semua tandaan dan barang indent?</span><button id="s-reset-yes" class="b-miss" aria-pressed="true">Ya, hapus</button><button id="s-reset-no">Batal</button>':'<button id="s-reset">Hapus semua tandaan</button>')+'</div></div>';
+  return h;
+}
+function render(){
+  compute(); selW=Math.min(Math.max(selW,1),C.maxW);
+  const dc=$('d-cand'),wasOpen=dc&&dc.open;
+  $('v-dash').innerHTML=view==='dash'?vDash():''; $('v-week').innerHTML=view==='week'?vWeek():'';
+  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():'';
+  if(wasOpen&&$('d-cand'))$('d-cand').open=true;
+  for(const v of ['dash','week','ind','rep','set']){$('v-'+v).hidden=view!==v;$('tab-'+v).setAttribute('aria-selected',view===v)}
+  const n=indList().filter(i=>i.al.lv).length,b=$('ind-n');b.hidden=!n;b.textContent=n;
+  $('h-title').textContent=cfg.project||'Kontrol Mingguan';
+  sub();
+  document.title=cfg.project?cfg.project+' · Kontrol Mingguan':'Kontrol Mingguan';
+  const show=DISCS.length>0&&view!=='set'; $('discbar').hidden=!show;
+  if(show){const c={};for(const t of T)c[t.disc]=(c[t.disc]||0)+1;
+    $('discchips').innerHTML='<span class="lab">Disiplin</span><button class="chip" data-disc="" aria-pressed="'+(!discF)+'">Semua ('+T.length+')</button>'+DISCS.map(d=>'<button class="chip" data-disc="'+esc(d)+'" aria-pressed="'+(discF===d)+'">'+esc(d)+' ('+c[d]+')</button>').join('')}
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+  if(d.view){view=d.view;confirmClose=confirmReset=false;render();return}
+  if('disc' in d){discF=d.disc;areaF='';render();return}
+  if('area' in d){areaF=d.area;render();return}
+  if(d.ok){setMark(selW,d.ok,'ok');return}
+  if(d.miss){setMark(selW,d.miss,'miss');return}
+  if(d.flag){flag(d.flag);return}
+  if(d.del){delete indent[d.del];saveState();render();return}
+  switch(b.id){
+    case 'w-prev':selW--;confirmClose=false;break;case 'w-next':selW++;confirmClose=false;break;case 'w-cur':selW=CUR;break;
+    case 'w-allok':bulk(selW,'ok');return;
+    case 'w-close':confirmClose=true;break;case 'w-close-no':confirmClose=false;break;
+    case 'w-close-yes':confirmClose=false;bulk(selW,'miss');return;
+    case 'ind-add':indent['m'+Date.now().toString(36)]={name:'Barang baru',task:'',lead:cfg.lead,need:n2iso(TODAY+cfg.lead*7),status:'belum'};saveState();break;
+    case 's-load':loadSheet();return;
+    case 's-sync':pull(true);return;
+    case 'r-print':window.print();return;
+    case 's-csv':$('f-csv').click();return;
+    case 's-import':$('f-json').click();return;
+    case 's-sample':setData(sampleRows(),'data contoh');msg={lv:'warn',txt:'Data contoh dimuat. Ini bukan jadwal Anda; ganti dengan Google Sheet atau CSV sendiri.'};view=view==='set'?'set':'dash';break;
+    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
+    case 's-reset':confirmReset=true;break;case 's-reset-no':confirmReset=false;break;
+    case 's-reset-yes':confirmReset=false;marks={};indent={};saveState();msg={lv:'ok',txt:'Semua tandaan dan barang indent dihapus.'};break;
+    default:return;
+  }
+  render();
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.id==='w-sel'){selW=+el.value;confirmClose=false;render();return}
+  if(el.id==='r-from'){repFrom=+el.value;if(repTo<repFrom)repTo=repFrom;render();return}
+  if(el.id==='r-to'){repTo=+el.value;if(repTo<repFrom)repFrom=repTo;render();return}
+  if(el.id==='f-csv'&&el.files[0]){const f=el.files[0];readFile(f,t=>{try{const r=rowsFromCSV(t);setData(r.rows,'file '+f.name);msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari '+f.name+(r.skip?', '+r.skip+' baris dilewati':'')+'.'}}catch(x){msg={lv:'crit',txt:x.message}}el.value='';render()});return}
+  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
+  if(el.dataset.cfg){const k=el.dataset.cfg;cfg[k]=k==='lead'?Math.max(0,Math.min(80,Math.round(+el.value||0))):el.value.trim();sv(K.cfg,cfg);if(k==='w1'){build();selW=CUR}render();return}
+  const id=el.dataset.ind;if(!id||!indent[id])return;const f=el.dataset.f;
+  if(f==='lead')indent[id].lead=Math.max(0,Math.min(80,Math.round(+el.value||0)));
+  else if(f==='need'){if(!el.value)return;indent[id].need=el.value}
+  else indent[id][f]=el.value;
+  saveState();render();
+});
+cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};stTs=s.ts||0}
+build(); selW=CUR; if(!T.length)view='set'; render(); if(cfg.sync)pull();
+</script>
+</body>
+</html>
