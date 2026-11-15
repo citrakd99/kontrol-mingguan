@@ -167,7 +167,7 @@ function parseCSV(text){
   if(cur!==''||row.length){row.push(cur);rows.push(row)}
   return rows;
 }
-const ALIAS={id:['id','no','no.'],disc:['disiplin','discipline','disciplin'],area:['area','gedung','lokasi','zona'],grp:['kelompok','kelompok pekerjaan','group','wbs','sub pekerjaan'],
+const ALIAS={id:['id'],disc:['disiplin','discipline','disciplin'],area:['area','gedung','lokasi','zona'],grp:['kelompok','kelompok pekerjaan','group','wbs','sub pekerjaan'],
   name:['pekerjaan','task','task name','nama pekerjaan','uraian','uraian pekerjaan','item'],dur:['durasi','durasi (hari)','duration','hari'],start:['mulai','start','tanggal mulai'],end:['selesai','finish','end','tanggal selesai']};
 function rowsFromCSV(text){
   const g=parseCSV(text.replace(/^﻿/,'')); let hi=-1,col={};
@@ -182,7 +182,7 @@ function rowsFromCSV(text){
     const s=parseDate(get('start')); if(!name||s==null){skip++;continue}
     let dur=parseInt(get('dur'),10); const e=parseDate(get('end'));
     if(isNaN(dur))dur=e!=null?Math.max(e-s+1,0):1;
-    out.push({id:get('id')||String(out.length+1),disc:normDisc(get('disc')),area:get('area')||'Umum',grp:get('grp'),name,s,dur});
+    out.push({id:get('id')||String(out.length+1),disc:'disc' in col?normDisc(get('disc')):guessDisc(get('grp'),get('area'),name),area:get('area')||'Umum',grp:get('grp'),name,s,dur});
   }
   if(!out.length)throw new Error('Tidak ada baris pekerjaan yang terbaca.');
   return {rows:out,skip};
@@ -192,6 +192,31 @@ function normDisc(s){
   if(/mep|elek|elec|listrik|mekanik|mechan|hvac|plumb|fire|t&c|commission|dismantle/i.test(s))return 'MEP';
   if(/csa|str|sipil|civil|ars|arch|persiapan|prelim/i.test(s))return 'CSA';
   return 'Umum';
+}
+function guessDisc(grp,area,name){
+  if(/\bCSA\b/i.test(grp))return 'CSA';
+  if(/mep|ele.?ctri|elektri|listrik|mechani|mekani|fire protection|plumbing|lighting|hvac/i.test(grp+' '+name))return 'MEP';
+  if(/dismantle|bongkar|test|commis/i.test(area))return 'MEP';
+  if(/milestone|punch|dokumen/i.test(area))return 'Umum';
+  return 'CSA';
+}
+async function getCsv(u){
+  const res=await fetch(u); const text=await res.text();
+  if(!res.ok||/^\s*</.test(text))throw new Error('Sheet tidak bisa dibaca. Pastikan dibagikan ke "Siapa saja yang memiliki link" sebagai Pelihat.');
+  return text;
+}
+/* Workbook mapping mingguan: tab Ringkasan berisi daftar nama tab per minggu, tiap tab berjudul kolom di baris 5. */
+async function loadMapping(id){
+  const base='https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?tqx=out:csv&headers=1';
+  const names=parseCSV(await getCsv(base+'&range=B4:B200')).map(r=>String(r[0]||'').trim());
+  if(names[0]!=='Sheet')return null;
+  const tabs=names.slice(1).filter(Boolean); if(!tabs.length)return null;
+  const parts=await Promise.all(tabs.map(n=>getCsv(base+'&range=A5:H&sheet='+encodeURIComponent(n)).then(rowsFromCSV).catch(()=>({rows:[]}))));
+  const seen={},rows=[];
+  for(const p of parts)for(const r of p.rows)if(!seen[r.id]){seen[r.id]=1;rows.push(r)}
+  if(!rows.length)return null;
+  rows.sort((a,b)=>(+a.id||0)-(+b.id||0));
+  return {rows,skip:0,tabs:tabs.length};
 }
 function sheetCsvUrl(link){
   link=link.trim(); if(/\/pub\?/.test(link)&&/output=csv/.test(link))return link;
@@ -295,12 +320,11 @@ async function loadSheet(){
     const urls=url.includes('/gviz/')?[url.replace('/gviz/tq?tqx=out:csv&','/export?format=csv&'),url+'&headers=1']:[url];
     let r=null,err=null;
     for(const u of urls){try{
-      const res=await fetch(u); const text=await res.text();
-      if(!res.ok||/^\s*</.test(text))throw new Error('Sheet tidak bisa dibaca. Pastikan dibagikan ke "Siapa saja yang memiliki link" sebagai Pelihat.');
-      r=rowsFromCSV(text);break}catch(x){err=x}}
+      r=rowsFromCSV(await getCsv(u));break}catch(x){err=x}}
+    if(!r){const m=(cfg.sheet||'').match(/\/spreadsheets\/d\/([\w-]+)/); if(m)try{r=await loadMapping(m[1])}catch(x){}}
     if(!r)throw err;
     setData(r.rows,'Google Sheet');
-    msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari Google Sheet'+(r.skip?', '+r.skip+' baris dilewati karena nama atau tanggal mulai kosong':'')+'.'};
+    msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari Google Sheet'+(r.tabs?' ('+r.tabs+' tab mingguan digabung)':'')+(r.skip?', '+r.skip+' baris dilewati karena nama atau tanggal mulai kosong':'')+'.'};
   }catch(e){msg={lv:'crit',txt:e.message==='Failed to fetch'?'Sheet tidak bisa dijangkau. Periksa koneksi dan pastikan sheet dibagikan ke "Siapa saja yang memiliki link".':e.message}}
   busy=false;render();
 }
