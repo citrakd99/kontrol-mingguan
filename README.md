@@ -24,6 +24,9 @@ Satu tab dengan satu baris judul. Kolom dikenali dari namanya:
 | Durasi | tidak | Hari kalender. Jika kosong dihitung dari Selesai. |
 | Mulai | ya | Paling aman `2026-11-03`. `03-Nov-26` dan `03/11/2026` juga terbaca. |
 | Selesai | tidak | |
+| Volume | tidak | Disebar per minggu sebanding jumlah hari pekerjaan di minggu itu. Bisa juga diisi dari webapp. |
+| Satuan | tidak | mis. m2, m3, unit. |
+| Bobot | tidak | Jika diisi, progres dihitung berdasarkan bobot. Jika kosong, berdasarkan lama pekerjaan. |
 
 Bagikan sheet ke "Siapa saja yang memiliki link" sebagai Pelihat, lalu tempel linknya di Pengaturan.
 
