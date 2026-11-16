@@ -242,7 +242,7 @@ function sampleRows(){
 
 /* ---------- state ---------- */
 const K={cfg:'wc-cfg',data:'wc-data',st:'wc-state'};
-let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:''}, rows=[], src='', marks={}, indent={}, vols={}, HASB=false;
+let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:''}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
 let T=[], TB={}, W1=0, BASEW=1, CUR=1, AREAS=[], DISCS=[];
 let repFrom=0, repTo=0;
 let view='dash', selW=1, areaF='', discF='', confirmClose=false, confirmReset=false, msg=null, busy=false, C=null;
@@ -250,17 +250,17 @@ const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}ca
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let stTs=0, syncMsg='', pushT=null;
 const hm=()=>new Date().toTimeString().slice(0,5);
-const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,vols,ts:stTs});schedulePush()};
+const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,vols,reals,ts:stTs});schedulePush()};
 function schedulePush(){if(!cfg.sync)return;clearTimeout(pushT);pushT=setTimeout(push,1500)}
 async function push(){
-  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent,vols})});
+  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent,vols,reals})});
     const o=await r.json();if(!o.ok)throw 0;syncMsg='tersimpan ke Google Sheet '+hm()}
   catch(e){syncMsg='gagal simpan ke Google Sheet, data tetap ada di browser ini'}
   sub();
 }
 async function pull(manual){
   try{const r=await fetch(cfg.sync);const o=await r.json();
-    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};vols=o.vols||{};stTs=o.ts;sv(K.st,{marks,indent,vols,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
+    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};stTs=o.ts;sv(K.st,{marks,indent,vols,reals,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
     else{syncMsg='terhubung ke Google Sheet';if(stTs&&!(o&&o.ts>=stTs))push()}
     if(manual)msg={lv:'ok',txt:'Terhubung. Tandaan dan barang indent sekarang ikut tersimpan ke Google Sheet.'}}
   catch(e){syncMsg='Google Sheet tidak terjangkau';if(manual)msg={lv:'crit',txt:'URL Apps Script tidak bisa dijangkau. Pastikan sudah di-deploy sebagai Web app dengan akses "Anyone".'}}
@@ -287,19 +287,27 @@ function compute(){
   const byW={},base={};let maxW=BASEW,units=0,okU=0,missU=0,done=0,slipped=0,late=0,wt=0,wok=0,wplan=0;
   const ar={};
   for(const t of TF){
-    const need=t.pe-t.ps+1;let ok=0,miss=0;
+    const need=t.pe-t.ps+1;let ok=0,miss=0,nmiss=0,vsum=0,cp=0;
+    const vv=vols[t.id]; t.vt=vv&&vv.v!=null?vv.v:(t.vol==null?null:t.vol); t.vu=vv&&vv.u?vv.u:(t.unit||''); const V=t.vt>0;
     for(let w=t.ps;w<=t.pe;w++)base[w]=(base[w]||0)+1;
     for(let w=t.ps;w<=t.pe+miss&&w<=BASEW+60;w++){
-      const m=(marks[w]||{})[t.id]||'';
-      if(m==='ok')ok++;else if(m==='miss')miss++;else if(w<CUR)late++;
-      (byW[w]||(byW[w]=[])).push({t,m,carry:w>t.pe,k:m==='ok'?ok-1:ok});
+      let m=(marks[w]||{})[t.id]||'';const it={t,carry:w>t.pe};
+      if(V){ /* target minggu ini = rencana kumulatif s/d minggu ini dikurangi realisasi sebelumnya */
+        const r=(reals[w]||{})[t.id]; cp=w>=t.pe?t.vt:cp+t.vt*t.sh[w-t.ps];
+        const tgt=Math.max(0,cp-vsum);let act=0;
+        if(r!=null){act=r;m=act>=tgt-1e-9?'ok':'miss';it.part=m==='miss'&&act>0;it.rv=r}
+        else if(m==='ok')act=tgt; else if(m===''&&tgt<=1e-9)m='ok';
+        vsum+=act;it.tgt=tgt;it.act=act;
+        if(m==='ok')ok++;else if(m==='miss'){nmiss++;if(w===t.pe+miss&&vsum<t.vt-1e-9)miss++}else if(w<CUR)late++;
+      }else{if(m==='ok')ok++;else if(m==='miss'){miss++;nmiss++}else if(w<CUR)late++}
+      it.m=m;(byW[w]||(byW[w]=[])).push(it);
     }
-    t.ok=ok;t.miss=miss;t.need=need;t.done=ok>=need;t.end=t.pe+miss;
+    t.ok=ok;t.miss=miss;t.need=need;t.vsum=vsum;t.done=V?vsum>=t.vt-1e-9:ok>=need;t.end=t.pe+miss;
     if(t.end>maxW)maxW=t.end;
-    units+=need;okU+=ok;missU+=miss;if(t.done)done++;if(miss)slipped++;
+    units+=need;okU+=ok;missU+=nmiss;if(t.done)done++;if(miss)slipped++;
     let cum=0,pl=0;for(let k=0;k<need;k++){if(k<ok)cum+=t.sh[k];if(t.ps+k<=CUR)pl+=t.sh[k]}
+    if(V)cum=Math.min(1,vsum/t.vt);
     const tw=HASB?(t.bobot||0):need; t.cum=cum; t.pl=pl; wt+=tw; wok+=tw*cum; wplan+=tw*pl;
-    const vv=vols[t.id]; t.vt=vv&&vv.v!=null?vv.v:(t.vol==null?null:t.vol); t.vu=vv&&vv.u?vv.u:(t.unit||'');
     const a=ar[t.area]||(ar[t.area]={n:0,done:0,u:0,ok:0,slip:0,w:0,wok:0});a.n++;a.u+=need;a.ok+=ok;a.w+=tw;a.wok+=tw*cum;if(t.done)a.done++;if(miss)a.slip++;
   }
   let planU=0;for(let w=1;w<=CUR;w++)planU+=base[w]||0;
@@ -321,8 +329,8 @@ const indList=()=>Object.entries(indent).map(([id,it])=>({id,...it,al:indAlert(i
   .filter(i=>!discF||!i.t||i.t.disc===discF).sort((a,b)=>(a.need<b.need?-1:1));
 
 /* ---------- aksi ---------- */
-function setMark(w,id,v){const m=marks[w]||(marks[w]={});if(m[id]===v)delete m[id];else m[id]=v;saveState();render()}
-function bulk(w,v){const m=marks[w]||(marks[w]={});for(const x of (C.byW[w]||[])){if(areaF&&x.t.area!==areaF)continue;if(m[x.t.id])continue;m[x.t.id]=v}saveState();render()}
+function setMark(w,id,v){const m=marks[w]||(marks[w]={}),r=reals[w]||{},had=r[id]!=null;delete r[id];if(!had&&m[id]===v)delete m[id];else m[id]=v;saveState();render()}
+function bulk(w,v){const m=marks[w]||(marks[w]={});for(const x of (C.byW[w]||[])){if(areaF&&x.t.area!==areaF)continue;if(x.m)continue;m[x.t.id]=v}saveState();render()}
 function flag(tid){const id='t'+tid;if(indent[id])delete indent[id];else{const t=TB[tid];indent[id]={name:t.name,task:tid,lead:cfg.lead,need:n2iso(t.s),status:'belum'}}saveState();render()}
 async function loadSheet(){
   const url=sheetCsvUrl(cfg.sheet||'');
@@ -380,7 +388,7 @@ function vDash(){
   for(const k of AREAS){const r=C.ar[k];if(!r)continue;h+='<tr><td>'+esc(k)+'</td><td class="num">'+r.n+'</td><td class="num">'+r.done+'</td><td class="num">'+(r.slip?'<span class="pill crit">'+r.slip+'</span>':'0')+'</td><td><div class="bar"><span style="width:'+pct(r.wok,r.w)+'%"></span></div></td><td class="num">'+pct(r.wok,r.w)+'%</td></tr>'}
   h+='</tbody></table></div></div>';
   const vl=C.TF.filter(t=>t.vt>0);
-  if(vl.length)h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Volume per pekerjaan</h2><p>Volume disebar per minggu sebanding jumlah hari kerja pekerjaan di minggu itu. Realisasi dihitung dari minggu yang ditandai tercapai.</p></div><div class="scroll" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Area</th><th class="num">Volume</th><th class="num">Rencana s/d '+wl(CUR)+'</th><th class="num">Realisasi</th><th class="num">Selisih</th><th>Progres</th></tr></thead><tbody>'
+  if(vl.length)h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Volume per pekerjaan</h2><p>Volume disebar per minggu sebanding jumlah hari kerja pekerjaan di minggu itu. Realisasi diambil dari angka yang diisi per minggu; minggu yang hanya ditandai tercapai dihitung sebesar targetnya.</p></div><div class="scroll" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Area</th><th class="num">Volume</th><th class="num">Rencana s/d '+wl(CUR)+'</th><th class="num">Realisasi</th><th class="num">Selisih</th><th>Progres</th></tr></thead><tbody>'
     +vl.map(t=>{const d=t.vt*(t.cum-t.pl);return '<tr><td>'+esc(t.id)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.area)+'</td><td class="num">'+nf(t.vt)+' '+esc(t.vu)+'</td><td class="num">'+nf(t.vt*t.pl)+'</td><td class="num">'+nf(t.vt*t.cum)+'</td><td class="num">'+(d<-1e-9?'<span class="pill crit">'+nf(d)+'</span>':nf(d))+'</td><td><div class="bar"><span style="width:'+pct(t.cum,1)+'%"></span></div></td></tr>'}).join('')+'</tbody></table></div></div>';
   const sl=C.TF.filter(t=>t.miss).sort((x,y)=>y.miss-x.miss).slice(0,12);
   if(sl.length)h+='<div class="panel" style="margin-top:18px"><div class="panel-h"><h2>Pekerjaan paling banyak bergeser</h2></div><div class="scroll"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Disiplin</th><th>Area</th><th class="num">Geser</th><th>Selesai baru</th></tr></thead><tbody>'
@@ -410,12 +418,13 @@ function vWeek(){
     if(t.area!==last){h+='<div class="grp">'+esc(t.area)+'</div>';last=t.area}
     const tags=['<span class="pill">'+esc(t.disc)+'</span>'];
     if(x.carry)tags.push('<span class="pill crit">Geseran +'+(w-t.pe)+' mgg</span>');
+    if(x.part)tags.push('<span class="pill warn">Sebagian, sisa digeser</span>');
     if(t.dur===0)tags.push('<span class="pill acc">Milestone</span>');
     else{if(w===t.ps)tags.push('<span class="pill acc">Mulai</span>');if(w===t.end)tags.push('<span class="pill">Target selesai</span>')}
     if(t.done)tags.push('<span class="pill ok">Selesai</span>');
     h+='<div class="row'+(x.m==='ok'?' s-ok':'')+'"><div class="id">'+esc(t.id)+'</div><div class="nm"><b>'+esc(t.name)+'</b>'+(t.grp?'<small>'+esc(t.grp)+'</small>':'')
      +'<div class="meta">'+tags.join('')+'<span>Rencana '+fmt(t.s)+' - '+fmt(t.e)+' ('+t.dur+' hari)</span><span>· '+t.ok+'/'+t.need+' minggu tercapai</span></div>'
-     +'<div class="vol">'+(t.vt!=null?'<span>'+(x.k<t.need?'Target minggu ini <b>'+nf(t.vt*t.sh[x.k])+' '+esc(t.vu)+'</b> · ':'')+'realisasi '+nf(t.vt*t.cum)+' dari '+nf(t.vt)+' '+esc(t.vu)+'</span>':'')
+     +'<div class="vol">'+(x.tgt!=null?'<span>Target minggu ini <b>'+nf(x.tgt)+' '+esc(t.vu)+'</b> · total '+nf(t.vsum)+' dari '+nf(t.vt)+' '+esc(t.vu)+'</span><label>Realisasi<input type="number" min="0" step="any" data-real="'+esc(t.id)+'" value="'+(x.rv!=null?x.rv:'')+'" placeholder="'+(x.m==='ok'?nf(x.act):'')+'"></label>':'')
      +'<label>Volume<input type="number" min="0" step="any" data-vol="'+esc(t.id)+'" value="'+(t.vt!=null?t.vt:'')+'"></label><label>Satuan<input data-volu="'+esc(t.id)+'" value="'+esc(t.vu)+'" placeholder="m2"></label></div></div>'
      +'<div class="acts"><button class="b-ok" data-ok="'+esc(t.id)+'" aria-pressed="'+(x.m==='ok')+'">Tercapai</button><button class="b-miss" data-miss="'+esc(t.id)+'" aria-pressed="'+(x.m==='miss')+'">Tidak, geser</button><button class="b-flag" data-flag="'+esc(t.id)+'" aria-pressed="'+(!!indent['t'+t.id])+'" title="Tandai sebagai barang indent">Indent</button></div></div>';
   }
@@ -467,8 +476,8 @@ function vRep(){
     h+='<h3>Kontrol mingguan '+wl(w)+' ('+fmt(wkStart(w))+' s/d '+fmt(wkEnd(w))+') · '+o+' dari '+l.length+' tercapai</h3>';
     if(!l.length){h+='<p class="note">Tidak ada pekerjaan terjadwal.</p>';continue}
     h+='<div class="scroll"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Disiplin</th><th>Area</th><th>Rencana</th><th>Status</th></tr></thead><tbody>'
-     +l.map(x=>'<tr><td>'+esc(x.t.id)+'</td><td>'+esc(x.t.name)+(x.t.grp?'<br><small style="color:var(--muted)">'+esc(x.t.grp)+'</small>':'')+'</td><td>'+esc(x.t.disc)+'</td><td>'+esc(x.t.area)+'</td><td style="white-space:nowrap">'+fmt(x.t.s)+' - '+fmt(x.t.e)+(x.t.vt!=null&&x.k<x.t.need?'<br>target '+nf(x.t.vt*x.t.sh[x.k])+' '+esc(x.t.vu):'')+'</td><td>'
-       +(x.m==='ok'?'<span class="pill ok">Tercapai</span>':x.m==='miss'?'<span class="pill crit">Tidak tercapai, digeser</span>':'<span class="pill">Belum ditandai</span>')+(x.carry?' <span class="pill warn">Geseran +'+(w-x.t.pe)+' mgg</span>':'')+'</td></tr>').join('')+'</tbody></table></div>';
+     +l.map(x=>'<tr><td>'+esc(x.t.id)+'</td><td>'+esc(x.t.name)+(x.t.grp?'<br><small style="color:var(--muted)">'+esc(x.t.grp)+'</small>':'')+'</td><td>'+esc(x.t.disc)+'</td><td>'+esc(x.t.area)+'</td><td style="white-space:nowrap">'+fmt(x.t.s)+' - '+fmt(x.t.e)+(x.tgt!=null?'<br>target '+nf(x.tgt)+' '+esc(x.t.vu)+', realisasi '+nf(x.act):'')+'</td><td>'
+       +(x.m==='ok'?'<span class="pill ok">Tercapai</span>':x.part?'<span class="pill warn">Sebagian, sisa digeser</span>':x.m==='miss'?'<span class="pill crit">Tidak tercapai, digeser</span>':'<span class="pill">Belum ditandai</span>')+(x.carry?' <span class="pill warn">Geseran +'+(w-x.t.pe)+' mgg</span>':'')+'</td></tr>').join('')+'</tbody></table></div>';
   }
   const il=indList();
   h+='<h3>Barang indent</h3>';
@@ -536,9 +545,9 @@ document.addEventListener('click',e=>{
     case 's-csv':$('f-csv').click();return;
     case 's-import':$('f-json').click();return;
     case 's-sample':setData(sampleRows(),'data contoh');msg={lv:'warn',txt:'Data contoh dimuat. Ini bukan jadwal Anda; ganti dengan Google Sheet atau CSV sendiri.'};view=view==='set'?'set':'dash';break;
-    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent,vols},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
+    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent,vols,reals},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
     case 's-reset':confirmReset=true;break;case 's-reset-no':confirmReset=false;break;
-    case 's-reset-yes':confirmReset=false;marks={};indent={};saveState();msg={lv:'ok',txt:'Semua tandaan dan barang indent dihapus.'};break;
+    case 's-reset-yes':confirmReset=false;marks={};indent={};reals={};saveState();msg={lv:'ok',txt:'Semua tandaan dan barang indent dihapus.'};break;
     default:return;
   }
   render();
@@ -549,8 +558,10 @@ document.addEventListener('change',e=>{
   if(el.id==='r-from'){repFrom=+el.value;if(repTo<repFrom)repTo=repFrom;render();return}
   if(el.id==='r-to'){repTo=+el.value;if(repTo<repFrom)repFrom=repTo;render();return}
   if(el.id==='f-csv'&&el.files[0]){const f=el.files[0];readFile(f,t=>{try{const r=rowsFromCSV(t);setData(r.rows,'file '+f.name);msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari '+f.name+(r.skip?', '+r.skip+' baris dilewati':'')+'.'}}catch(x){msg={lv:'crit',txt:x.message}}el.value='';render()});return}
-  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};vols=o.vols||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
+  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
   if(el.dataset.cfg){const k=el.dataset.cfg;cfg[k]=k==='lead'?Math.max(0,Math.min(80,Math.round(+el.value||0))):el.value.trim();sv(K.cfg,cfg);if(k==='w1'){build();selW=CUR}render();return}
+  if(el.dataset.real!=null){const k=el.dataset.real,v=num(el.value),r=reals[selW]||(reals[selW]={});
+    if(v==null)delete r[k];else{r[k]=Math.max(0,v);if(marks[selW])delete marks[selW][k]}saveState();render();return}
   if(el.dataset.vol!=null||el.dataset.volu!=null){const k=el.dataset.vol!=null?el.dataset.vol:el.dataset.volu,o=vols[k]||(vols[k]={v:null,u:''});
     if(el.dataset.vol!=null)o.v=num(el.value);else o.u=el.value.trim();
     if(o.v==null&&!o.u)delete vols[k];saveState();render();return}
@@ -560,7 +571,7 @@ document.addEventListener('change',e=>{
   else indent[id][f]=el.value;
   saveState();render();
 });
-cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};stTs=s.ts||0}
+cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};reals=s.reals||{};stTs=s.ts||0}
 build(); selW=CUR; if(!T.length)view='set'; render(); if(cfg.sync)pull();
 </script>
 </body>
