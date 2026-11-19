@@ -98,13 +98,16 @@ code{background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px
 .vol input{width:84px;padding:2px 6px}
 .vol input[data-volu]{width:60px}
 .vol b{color:var(--fg)}
+#q{flex:1 1 220px;max-width:360px;min-width:0}
+.row.flash{background:var(--warn-soft);border-radius:6px}
+@media (prefers-reduced-motion:no-preference){.row.flash{transition:background 2s}}
 h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
 .btnrow label{min-width:200px}
 @media print{
   :root{--bg:#fff;--surface:#fff;--surface2:#eceff3;--line:#c9d0da;--fg:#111;--muted:#444;--accent:#1f5f8b;--accent-fg:#fff;--accent-soft:#dbe9f3;
     --ok:#2c7a4b;--ok-soft:#dcefe3;--warn:#a8690a;--warn-soft:#f8ecd2;--crit:#b3362b;--crit-soft:#f8dedb;--idle:#b9c3d0;color-scheme:light}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  header,.no-print,main>section:not(#v-rep){display:none!important}
+  header,.no-print,main>section[hidden]{display:none!important}
   body{font-size:11px} main.wrap{max-width:none;padding:0}
   .panel{border:none;padding:0} .scroll{overflow:visible} svg{max-width:100%;height:auto}
   tr,.kpi{break-inside:avoid} h3{break-after:avoid} thead{display:table-header-group}
@@ -121,9 +124,11 @@ h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
 <header>
   <div class="wrap">
     <h1><span id="h-title">Kontrol Mingguan</span><small id="h-sub"></small></h1>
+    <input id="q" type="search" placeholder="Cari task: nama, ID, area, atau W12" aria-label="Cari task" autocomplete="off">
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-dash" data-view="dash">Dashboard</button>
       <button class="tab" role="tab" id="tab-week" data-view="week">Kontrol Mingguan</button>
+      <button class="tab" role="tab" id="tab-la" data-view="la">Lookahead</button>
       <button class="tab" role="tab" id="tab-ind" data-view="ind">Barang Indent<span class="n" id="ind-n" hidden></span></button>
       <button class="tab" role="tab" id="tab-rep" data-view="rep">Laporan</button>
       <button class="tab" role="tab" id="tab-set" data-view="set">Pengaturan</button>
@@ -135,6 +140,8 @@ h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
   <section id="v-dash"></section>
   <section id="v-week" hidden></section>
   <section id="v-ind" hidden></section>
+  <section id="v-la" hidden></section>
+  <section id="v-cari" hidden></section>
   <section id="v-rep" hidden></section>
   <section id="v-set" hidden></section>
 </main>
@@ -242,9 +249,9 @@ function sampleRows(){
 
 /* ---------- state ---------- */
 const K={cfg:'wc-cfg',data:'wc-data',st:'wc-state'};
-let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:''}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
+let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:'',laN:3,laPrep:2,laMode:'mulai'}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
 let T=[], TB={}, W1=0, BASEW=1, CUR=1, AREAS=[], DISCS=[];
-let repFrom=0, repTo=0;
+let repFrom=0, repTo=0, laFrom=0, q='', prevView='dash', jump=null;
 let view='dash', selW=1, areaF='', discF='', confirmClose=false, confirmReset=false, msg=null, busy=false, C=null;
 const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
@@ -378,6 +385,7 @@ function vDash(){
    +'<div class="kpi"><div class="l">Pekerjaan tergeser</div><div class="v">'+C.slipped+'</div><div class="s">'+C.missU+' target digeser ke minggu berikut</div></div>'
    +'<div class="kpi"><div class="l">Proyeksi selesai</div><div class="v">'+wl(C.maxW)+'</div><div class="s">'+(slipW>0?'mundur '+slipW+' minggu dari baseline '+wl(BASEW):'sesuai baseline '+wl(BASEW))+'</div></div></div>';
   const a=[];
+  {const pn=prepNow();if(pn.length)a.push('<div class="alert warn"><b>'+pn.length+' task mulai dalam '+cfg.laPrep+' minggu dan perlu disiapkan sekarang.</b><button data-view="la">Lihat Lookahead</button></div>')}
   if(C.late)a.push('<div class="alert warn"><b>'+C.late+' target di minggu lalu belum ditandai.</b><span>Buka minggunya lalu tandai atau tutup minggu supaya sisanya digeser.</span></div>');
   for(const i of al)a.push('<div class="alert '+i.al.lv+'"><span class="pill '+i.al.lv+'">Indent</span><b>'+esc(i.name)+'</b><span>'+esc(i.al.txt)+'</span></div>');
   if(a.length)h+='<div class="alerts" style="margin-top:14px">'+a.join('')+'</div>';
@@ -422,7 +430,7 @@ function vWeek(){
     if(t.dur===0)tags.push('<span class="pill acc">Milestone</span>');
     else{if(w===t.ps)tags.push('<span class="pill acc">Mulai</span>');if(w===t.end)tags.push('<span class="pill">Target selesai</span>')}
     if(t.done)tags.push('<span class="pill ok">Selesai</span>');
-    h+='<div class="row'+(x.m==='ok'?' s-ok':'')+'"><div class="id">'+esc(t.id)+'</div><div class="nm"><b>'+esc(t.name)+'</b>'+(t.grp?'<small>'+esc(t.grp)+'</small>':'')
+    h+='<div class="row'+(x.m==='ok'?' s-ok':'')+'" id="row-'+esc(t.id)+'"><div class="id">'+esc(t.id)+'</div><div class="nm"><b>'+esc(t.name)+'</b>'+(t.grp?'<small>'+esc(t.grp)+'</small>':'')
      +'<div class="meta">'+tags.join('')+'<span>Rencana '+fmt(t.s)+' - '+fmt(t.e)+' ('+t.dur+' hari)</span><span>· '+t.ok+'/'+t.need+' minggu tercapai</span></div>'
      +'<div class="vol">'+(x.tgt!=null?'<span>Target minggu ini <b>'+nf(x.tgt)+' '+esc(t.vu)+'</b> · total '+nf(t.vsum)+' dari '+nf(t.vt)+' '+esc(t.vu)+'</span><label>Realisasi<input type="number" min="0" step="any" data-real="'+esc(t.id)+'" value="'+(x.rv!=null?x.rv:'')+'" placeholder="'+(x.m==='ok'?nf(x.act):'')+'"></label>':'')
      +'<label>Volume<input type="number" min="0" step="any" data-vol="'+esc(t.id)+'" value="'+(t.vt!=null?t.vt:'')+'"></label><label>Satuan<input data-volu="'+esc(t.id)+'" value="'+esc(t.vu)+'" placeholder="m2"></label></div></div>'
@@ -486,6 +494,66 @@ function vRep(){
     +il.map(i=>{const n=parseDate(i.need);return '<tr><td>'+esc(i.name)+'</td><td class="num">'+i.lead+' mgg</td><td>'+(n!=null?fmt(n):'-')+'</td><td>'+({belum:'Belum PO',po:'Sudah PO',tiba:'Sudah tiba'}[i.status]||'')+'</td><td><span class="pill '+(i.al.lv||(i.al.ok?'ok':''))+'">'+esc(i.al.txt)+'</span></td></tr>'}).join('')+'</tbody></table></div>';
   return h+'</div>';
 }
+function stTask(t){
+  if(t.done)return{c:'ok',x:'Selesai'};
+  if(CUR>t.end)return{c:'crit',x:'Terlambat, target selesai '+wl(t.end)};
+  if(CUR>=t.ps)return{c:'acc',x:'Berjalan, minggu ke-'+(CUR-t.ps+1)+' dari '+(t.end-t.ps+1)};
+  const p=t.ps-cfg.laPrep;
+  if(CUR>=p)return{c:'warn',x:'Siapkan sekarang, mulai '+wl(t.ps)};
+  return{c:'',x:'Mulai '+wl(t.ps)+', persiapan dari '+wl(Math.max(1,p))};
+}
+const prepNow=()=>C.TF.filter(t=>!t.done&&t.ps>CUR&&t.ps-cfg.laPrep<=CUR).sort((a,b)=>a.s-b.s);
+function vCari(){
+  if(!T.length)return noData();
+  const terms=q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit=C.TF.filter(t=>{const hay=(t.id+' '+t.name+' '+t.grp+' '+t.area+' '+t.disc+' '+(t.vu||'')).toLowerCase();
+    return terms.every(s=>{const m=s.match(/^w(\d{1,3})$/);return m?(t.ps<=+m[1]&&+m[1]<=t.end):hay.includes(s)})}).sort((a,b)=>a.s-b.s||String(a.id).localeCompare(String(b.id),undefined,{numeric:true}));
+  let h='<div class="panel"><div class="panel-h"><h2>Hasil pencarian "'+esc(q.trim())+'"</h2><p>'+hit.length+' task'+(discF?' di disiplin '+esc(discF):'')+'. Ketik <code>W12</code> untuk melihat semua task yang dikerjakan di minggu 12.</p><span class="spacer"></span><button id="q-clear">Tutup pencarian</button></div>';
+  if(discF)h+='<p class="note">Filter disiplin '+esc(discF)+' sedang aktif. <button data-disc="">Cari di semua disiplin</button></p>';
+  if(!hit.length)h+='<div class="empty">Tidak ada task yang cocok.</div>';
+  else h+='<div class="scroll"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Disiplin / Area</th><th>Rencana</th><th>Minggu</th><th>Volume</th><th>Status</th><th></th></tr></thead><tbody>'
+    +hit.slice(0,150).map(t=>{const s=stTask(t),go=t.ps<=CUR&&CUR<=t.end?CUR:t.ps;
+      return '<tr><td>'+esc(t.id)+'</td><td><b style="font-weight:500">'+esc(t.name)+'</b>'+(t.grp?'<br><small style="color:var(--muted)">'+esc(t.grp)+'</small>':'')+'</td><td>'+esc(t.disc)+'<br><small style="color:var(--muted)">'+esc(t.area)+'</small></td>'
+       +'<td style="white-space:nowrap">'+fmt(t.s)+' - '+fmt(t.e)+'<br><small style="color:var(--muted)">'+t.dur+' hari</small></td>'
+       +'<td style="white-space:nowrap">'+wl(t.ps)+(t.pe>t.ps?' - '+wl(t.pe):'')+(t.end>t.pe?'<br><span class="pill crit">geser ke '+wl(t.end)+'</span>':'')+'</td>'
+       +'<td style="white-space:nowrap">'+(t.vt>0?nf(t.vsum)+' / '+nf(t.vt)+' '+esc(t.vu):'-')+'</td>'
+       +'<td><span class="pill '+s.c+'">'+esc(s.x)+'</span></td><td><button data-goto="'+esc(t.id)+'" data-gw="'+go+'">Buka '+wl(go)+'</button></td></tr>'}).join('')
+    +'</tbody></table></div>'+(hit.length>150?'<p class="note">Menampilkan 150 pertama. Persempit kata kuncinya.</p>':'');
+  return h+'</div>';
+}
+function vLa(){
+  if(!T.length)return noData();
+  const P=cfg.laPrep,N=cfg.laN,mode=cfg.laMode;
+  const from=Math.min(Math.max(laFrom||CUR+1,1),C.maxW),to=N?Math.min(from+N-1,C.maxW):C.maxW;
+  let opt='';for(let i=1;i<=C.maxW;i++)opt+='<option value="'+i+'"'+(i===from?' selected':'')+'>'+wl(i)+' · '+fmt(wkStart(i))+(i===CUR?' (minggu ini)':'')+'</option>';
+  const sel=(id,cur,list)=>'<select id="'+id+'">'+list.map(([v,l])=>'<option value="'+v+'"'+(String(v)===String(cur)?' selected':'')+'>'+l+'</option>').join('')+'</select>';
+  let h='<div class="panel no-print"><div class="panel-h"><h2>Lookahead</h2><p>Task yang akan dikerjakan di minggu-minggu ke depan, dengan waktu persiapan sebelum mulai.</p></div>'
+   +'<div class="btnrow"><label>Mulai dari<select id="la-from">'+opt+'</select></label>'
+   +'<label>Rentang'+sel('la-n',N,[[1,'1 minggu'],[2,'2 minggu'],[3,'3 minggu'],[4,'4 minggu'],[6,'6 minggu'],[8,'8 minggu'],[12,'12 minggu'],[0,'Semua minggu']])+'</label>'
+   +'<label>Persiapan'+sel('la-prep',P,[[1,'1 minggu sebelum mulai'],[2,'2 minggu sebelum mulai'],[3,'3 minggu sebelum mulai'],[4,'4 minggu sebelum mulai']])+'</label>'
+   +'<label>Tampilkan'+sel('la-mode',mode,[['mulai','Task yang mulai'],['aktif','Semua task aktif']])+'</label>'
+   +'<span class="spacer"></span><button id="la-print">Cetak / Simpan PDF</button></div></div>';
+  h+='<div class="panel" style="margin-top:18px"><div><h2 style="font-size:20px">Lookahead '+wl(from)+(to>from?' s/d '+wl(to):'')+(cfg.project?' · '+esc(cfg.project):'')+'</h2>'
+   +'<p class="note">'+(cfg.client?'Client: '+esc(cfg.client)+' · ':'')+fmt(wkStart(from))+' s/d '+fmt(wkEnd(to))+' · Disiplin: '+(discF?esc(discF):'Semua')+' · Persiapan '+P+' minggu sebelum mulai · Dicetak '+fmt(TODAY)+'</p></div>';
+  const pn=prepNow();
+  h+='<h3>Perlu disiapkan sekarang ('+wl(CUR)+') · '+pn.length+' task mulai dalam '+P+' minggu</h3>';
+  h+=pn.length?laTable(pn.map(t=>({t})),true):'<p class="note">Tidak ada task yang masuk masa persiapan minggu ini.</p>';
+  for(let w=from;w<=to;w++){
+    const list=(mode==='mulai'?C.TF.filter(t=>t.ps===w).map(t=>({t,it:(C.byW[w]||[]).find(x=>x.t===t)})):(C.byW[w]||[]).map(x=>({t:x.t,it:x})))
+      .sort((a,b)=>a.t.area.localeCompare(b.t.area)||a.t.s-b.t.s);
+    h+='<h3>'+wl(w)+' · '+fmt(wkStart(w))+' s/d '+fmt(wkEnd(w))+' · '+list.length+' task '+(mode==='mulai'?'mulai':'aktif')+(mode==='mulai'&&list.length?' · persiapan sejak '+wl(Math.max(1,w-P)):'')+'</h3>';
+    h+=list.length?laTable(list,false):'<p class="note">Tidak ada task yang '+(mode==='mulai'?'mulai':'aktif')+' di minggu ini.</p>';
+  }
+  return h+'</div>';
+}
+function laTable(list,showStart){
+  return '<div class="scroll"><table><thead><tr><th>ID</th><th>Pekerjaan</th><th>Disiplin</th><th>Area</th><th>Rencana</th><th>Volume</th><th>Status</th><th class="no-print"></th></tr></thead><tbody>'
+   +list.map(({t,it})=>{const s=stTask(t);return '<tr><td>'+esc(t.id)+'</td><td>'+esc(t.name)+(t.grp?'<br><small style="color:var(--muted)">'+esc(t.grp)+'</small>':'')+'</td><td>'+esc(t.disc)+'</td><td>'+esc(t.area)+'</td>'
+     +'<td style="white-space:nowrap">'+fmt(t.s)+' - '+fmt(t.e)+'<br><small style="color:var(--muted)">'+t.dur+' hari'+(showStart?' · '+Math.max(0,t.s-TODAY)+' hari lagi':'')+'</small></td>'
+     +'<td style="white-space:nowrap">'+(t.vt>0?(it&&it.tgt!=null?'target '+nf(it.tgt):nf(t.vt))+' '+esc(t.vu):'-')+'</td>'
+     +'<td><span class="pill '+s.c+'">'+esc(s.x)+'</span>'+(indent['t'+t.id]?' <span class="pill warn">Indent</span>':'')+'</td>'
+     +'<td class="no-print"><button class="b-flag" data-flag="'+esc(t.id)+'" aria-pressed="'+(!!indent['t'+t.id])+'">Indent</button></td></tr>'}).join('')+'</tbody></table></div>';
+}
 function vSet(){
   let h='';
   if(msg)h+='<div class="alert '+msg.lv+'" style="margin-bottom:14px">'+esc(msg.txt)+'</div>';
@@ -513,9 +581,10 @@ function render(){
   compute(); selW=Math.min(Math.max(selW,1),C.maxW);
   const dc=$('d-cand'),wasOpen=dc&&dc.open;
   $('v-dash').innerHTML=view==='dash'?vDash():''; $('v-week').innerHTML=view==='week'?vWeek():'';
-  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():'';
+  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():''; $('v-la').innerHTML=view==='la'?vLa():''; $('v-cari').innerHTML=view==='cari'?vCari():'';
   if(wasOpen&&$('d-cand'))$('d-cand').open=true;
-  for(const v of ['dash','week','ind','rep','set']){$('v-'+v).hidden=view!==v;$('tab-'+v).setAttribute('aria-selected',view===v)}
+  for(const v of ['dash','week','la','ind','rep','set','cari']){$('v-'+v).hidden=view!==v;const tb=$('tab-'+v);if(tb)tb.setAttribute('aria-selected',view===v)}
+  if(jump){const r=$('row-'+jump);if(r&&r.scrollIntoView){r.scrollIntoView({block:'center'});r.classList.add('flash')}jump=null}
   const n=indList().filter(i=>i.al.lv).length,b=$('ind-n');b.hidden=!n;b.textContent=n;
   $('h-title').textContent=cfg.project||'Kontrol Mingguan';
   sub();
@@ -527,6 +596,7 @@ function render(){
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
   if(d.view){view=d.view;confirmClose=confirmReset=false;render();return}
+  if(d.goto){selW=+d.gw;areaF='';view='week';jump=d.goto;render();return}
   if('disc' in d){discF=d.disc;areaF='';render();return}
   if('area' in d){areaF=d.area;render();return}
   if(d.ok){setMark(selW,d.ok,'ok');return}
@@ -541,7 +611,8 @@ document.addEventListener('click',e=>{
     case 'ind-add':indent['m'+Date.now().toString(36)]={name:'Barang baru',task:'',lead:cfg.lead,need:n2iso(TODAY+cfg.lead*7),status:'belum'};saveState();break;
     case 's-load':loadSheet();return;
     case 's-sync':pull(true);return;
-    case 'r-print':window.print();return;
+    case 'r-print':case 'la-print':window.print();return;
+    case 'q-clear':q='';$('q').value='';view=prevView;break;
     case 's-csv':$('f-csv').click();return;
     case 's-import':$('f-json').click();return;
     case 's-sample':setData(sampleRows(),'data contoh');msg={lv:'warn',txt:'Data contoh dimuat. Ini bukan jadwal Anda; ganti dengan Google Sheet atau CSV sendiri.'};view=view==='set'?'set':'dash';break;
@@ -555,6 +626,8 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const el=e.target;
   if(el.id==='w-sel'){selW=+el.value;confirmClose=false;render();return}
+  if(el.id==='la-from'){laFrom=+el.value;render();return}
+  if(el.id==='la-n'||el.id==='la-prep'||el.id==='la-mode'){const k={'la-n':'laN','la-prep':'laPrep','la-mode':'laMode'}[el.id];cfg[k]=k==='laMode'?el.value:+el.value;sv(K.cfg,cfg);render();return}
   if(el.id==='r-from'){repFrom=+el.value;if(repTo<repFrom)repTo=repFrom;render();return}
   if(el.id==='r-to'){repTo=+el.value;if(repTo<repFrom)repFrom=repTo;render();return}
   if(el.id==='f-csv'&&el.files[0]){const f=el.files[0];readFile(f,t=>{try{const r=rowsFromCSV(t);setData(r.rows,'file '+f.name);msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari '+f.name+(r.skip?', '+r.skip+' baris dilewati':'')+'.'}}catch(x){msg={lv:'crit',txt:x.message}}el.value='';render()});return}
@@ -571,6 +644,9 @@ document.addEventListener('change',e=>{
   else indent[id][f]=el.value;
   saveState();render();
 });
+document.addEventListener('input',e=>{if(e.target.id!=='q')return;q=e.target.value;
+  if(q.trim()){if(view!=='cari')prevView=view;view='cari'}else if(view==='cari')view=prevView;render()});
+document.addEventListener('keydown',e=>{if(e.target.id==='q'&&e.key==='Escape'&&q){q='';e.target.value='';view=prevView;render()}});
 cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};reals=s.reals||{};stTs=s.ts||0}
 build(); selW=CUR; if(!T.length)view='set'; render(); if(cfg.sync)pull();
 </script>

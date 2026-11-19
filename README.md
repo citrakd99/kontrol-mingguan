@@ -8,6 +8,8 @@ Aplikasi web satu halaman untuk mengontrol pencapaian jadwal proyek per minggu. 
 - Dashboard: progres, PPC, pekerjaan tergeser, proyeksi minggu selesai, beban per minggu, pencapaian per area.
 - Filter disiplin: Semua, CSA, MEP.
 - Barang indent: batas pesan dihitung dari tanggal butuh dikurangi lead time, dengan peringatan 14 hari sebelumnya.
+- Pencarian task berdasarkan nama, ID, area, atau minggu (`W12`), dengan status dan minggu pelaksanaannya.
+- Lookahead: task yang mulai atau aktif di 1 sampai 12 minggu ke depan atau semua minggu, dengan masa persiapan 1 sampai 4 minggu sebelum mulai.
 - Laporan untuk satu atau beberapa minggu, dicetak atau disimpan sebagai PDF lewat dialog cetak browser.
 
 ## Format Google Sheet jadwal
