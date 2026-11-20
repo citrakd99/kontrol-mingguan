@@ -612,7 +612,10 @@ function parsePG(g){
   if(!items.length)throw new Error('Tidak ada item berbobot yang terbaca.');
   return {items,weeks};
 }
-function pgWk(i){const W=PG.weeks,L=W.length-1;if(i<=L)return W[i];const d=W[L].d+7*(i-L);const x=n2d(d);return {d,n:W[L].n+(i-L),m:BLN[x.getUTCMonth()]+' '+x.getUTCFullYear()}}
+const BLNF=['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+function pgWk(i){const W=PG.weeks,L=W.length-1;if(i<=L)return W[i];const d=W[L].d+7*(i-L),x=n2d(d),y=n2d(W[L].d);
+  const same=x.getUTCMonth()===y.getUTCMonth()&&x.getUTCFullYear()===y.getUTCFullYear();
+  return {d,n:W[L].n+(i-L),m:same&&W[L].m?W[L].m:BLNF[x.getUTCMonth()]+' - '+x.getUTCFullYear()}}
 function pgIdx(x){const W=PG.weeks;if(x<W[0].d+7)return 0;for(let k=0;k<W.length;k++)if(W[k].d<=x&&x<W[k].d+7)return k;const L=W.length-1;return x<W[L].d?L:L+Math.ceil((x-W[L].d-6)/7)}
 const pgCur=()=>Math.min(pgIdx(TODAY),PG.weeks.length-1);
 function pgCompute(){
@@ -631,7 +634,7 @@ function pgCompute(){
     if(rem>1e-12){const dist=[],fo=pf[it.k]?parseDate(pf[it.k]):null;
       if(fo!=null){const z=Math.max(cur+1,pgIdx(fo));for(let i=cur+1;i<=z&&i<H;i++)dist.push([i,1])}
       else{for(let j=0;j<it.p.length;j++){const i=it.ps+j;if(i>cur&&it.p[j]>0)dist.push([i,it.p[j]])}
-        if(!dist.length)for(let i=cur+1;i<=cur+cfg.pgCatch&&i<H;i++)dist.push([i,1])}
+        if(!dist.length)for(let i=cur+1;i<=cur+(+cfg.pgCatch||2)&&i<H;i++)dist.push([i,1])}
       const s=dist.reduce((a,b)=>a+b[1],0);for(const [i,x] of dist)fcw[i]+=rem*x/s;it.fe=dist.length?dist[dist.length-1][0]:null}
   }
   for(let i=cur;i>0;i--)act[i]-=act[i-1];
@@ -670,6 +673,11 @@ function pgSum(){
    +'<div class="kpi"><div class="l">Deviasi</div><div class="v" style="color:'+(dev<-0.005?'var(--crit)':'var(--ok)')+'">'+(dev>0?'+':'')+pp(dev)+'%</div><div class="s">'+(dev<-0.005?'terlambat dari rencana':'sesuai atau di depan rencana')+'</div></div>'
    +'<div class="kpi"><div class="l">SPI</div><div class="v">'+(spi==null?'-':spi.toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2}))+'</div><div class="s">aktual dibagi rencana</div></div>'
    +'<div class="kpi"><div class="l">Forecast selesai</div><div class="v">'+(fE==null?'-':wl(pgWk(fE).n))+'</div><div class="s">'+(fE==null?'belum terhitung':lag>0?'mundur '+lag+' minggu dari rencana '+wl(pgWk(P.lastP).n):'sesuai rencana '+wl(pgWk(P.lastP).n))+'</div></div></div>';
+  if(fE!=null&&fE>P.lastP){const lt=P.its.filter(it=>it.fe!=null&&it.fe>P.lastP).sort((a,b)=>b.fe-a.fe);
+    h+='<div class="alert warn" style="margin-top:14px;flex-direction:column;align-items:flex-start"><b>Forecast selesai lewat akhir rencana '+wl(pgWk(P.lastP).n)+' karena '+lt.length+' item berikut:</b>'
+     +'<div class="scroll" style="width:100%"><table><thead><tr><th>Item</th><th>Uraian</th><th class="num">Bobot</th><th class="num">Aktual</th><th>Forecast selesai</th><th>Penyebab</th></tr></thead><tbody>'
+     +lt.slice(0,20).map(it=>'<tr><td>'+esc(it.c)+'</td><td>'+esc(it.d)+'</td><td class="num">'+pp(it.w)+'</td><td class="num">'+pp(it.ac)+'%</td><td>'+wl(pgWk(it.fe).n)+'</td><td>'+(pf[it.k]?'Tanggal forecast diisi manual '+esc(pf[it.k])+'. Kosongkan di Input aktual untuk kembali otomatis.':'Rencana item sudah lewat, sisa diselesaikan dalam '+cfg.pgCatch+' minggu.')+'</td></tr>').join('')
+     +'</tbody></table></div>'+(lt.length>20?'<span class="note">dan '+(lt.length-20)+' item lain.</span>':'')+'</div>'}
   h+='<h3>Kurva S</h3><div class="legend"><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>Rencana kumulatif</span><span><i style="background:var(--ok);height:3px;vertical-align:3px"></i>Aktual kumulatif</span><span><i style="background:var(--warn);height:2px;vertical-align:3px"></i>Forecast kumulatif</span><span><i style="background:var(--idle)"></i>Rencana mingguan</span><span><i style="background:var(--ok);opacity:.55"></i>Aktual mingguan</span><span><i style="background:var(--accent-soft)"></i>Minggu laporan</span></div><div class="scroll">'+pgChart()+'</div>'
    +'<p class="note">Batang mingguan digambar 4 kali skala sumbu supaya terbaca.</p>';
   h+='<h3>Tabel mingguan</h3><div class="scroll" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>Minggu</th><th>Tanggal</th><th>Bulan</th><th class="num">Rencana</th><th class="num">Rencana kum.</th><th class="num">Aktual</th><th class="num">Aktual kum.</th><th class="num">Forecast</th><th class="num">Forecast kum.</th><th class="num">Deviasi kum.</th></tr></thead><tbody>';
