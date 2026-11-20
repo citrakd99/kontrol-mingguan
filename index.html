@@ -129,6 +129,7 @@ h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
       <button class="tab" role="tab" id="tab-dash" data-view="dash">Dashboard</button>
       <button class="tab" role="tab" id="tab-week" data-view="week">Kontrol Mingguan</button>
       <button class="tab" role="tab" id="tab-la" data-view="la">Lookahead</button>
+      <button class="tab" role="tab" id="tab-pg" data-view="pg">Progress</button>
       <button class="tab" role="tab" id="tab-ind" data-view="ind">Barang Indent<span class="n" id="ind-n" hidden></span></button>
       <button class="tab" role="tab" id="tab-rep" data-view="rep">Laporan</button>
       <button class="tab" role="tab" id="tab-set" data-view="set">Pengaturan</button>
@@ -141,11 +142,13 @@ h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
   <section id="v-week" hidden></section>
   <section id="v-ind" hidden></section>
   <section id="v-la" hidden></section>
+  <section id="v-pg" hidden></section>
   <section id="v-cari" hidden></section>
   <section id="v-rep" hidden></section>
   <section id="v-set" hidden></section>
 </main>
 <input type="file" id="f-csv" accept=".csv,text/csv" hidden>
+<input type="file" id="f-xlsx" accept=".xlsx,.xlsm,.xls" hidden>
 <input type="file" id="f-json" accept=".json,application/json" hidden>
 
 <script>
@@ -249,7 +252,7 @@ function sampleRows(){
 
 /* ---------- state ---------- */
 const K={cfg:'wc-cfg',data:'wc-data',st:'wc-state'};
-let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:'',laN:3,laPrep:2,laMode:'mulai'}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
+let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:'',laN:3,laPrep:2,laMode:'mulai',pgCatch:2}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
 let T=[], TB={}, W1=0, BASEW=1, CUR=1, AREAS=[], DISCS=[];
 let repFrom=0, repTo=0, laFrom=0, q='', prevView='dash', jump=null;
 let view='dash', selW=1, areaF='', discF='', confirmClose=false, confirmReset=false, msg=null, busy=false, C=null;
@@ -257,17 +260,17 @@ const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}ca
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let stTs=0, syncMsg='', pushT=null;
 const hm=()=>new Date().toTimeString().slice(0,5);
-const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,vols,reals,ts:stTs});schedulePush()};
+const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,vols,reals,pa,pf,ts:stTs});schedulePush()};
 function schedulePush(){if(!cfg.sync)return;clearTimeout(pushT);pushT=setTimeout(push,1500)}
 async function push(){
-  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent,vols,reals})});
+  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent,vols,reals,pa,pf})});
     const o=await r.json();if(!o.ok)throw 0;syncMsg='tersimpan ke Google Sheet '+hm()}
   catch(e){syncMsg='gagal simpan ke Google Sheet, data tetap ada di browser ini'}
   sub();
 }
 async function pull(manual){
   try{const r=await fetch(cfg.sync);const o=await r.json();
-    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};stTs=o.ts;sv(K.st,{marks,indent,vols,reals,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
+    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};pa=o.pa||{};pf=o.pf||{};stTs=o.ts;sv(K.st,{marks,indent,vols,reals,pa,pf,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
     else{syncMsg='terhubung ke Google Sheet';if(stTs&&!(o&&o.ts>=stTs))push()}
     if(manual)msg={lv:'ok',txt:'Terhubung. Tandaan dan barang indent sekarang ikut tersimpan ke Google Sheet.'}}
   catch(e){syncMsg='Google Sheet tidak terjangkau';if(manual)msg={lv:'crit',txt:'URL Apps Script tidak bisa dijangkau. Pastikan sudah di-deploy sebagai Web app dengan akses "Anyone".'}}
@@ -554,6 +557,185 @@ function laTable(list,showStart){
      +'<td><span class="pill '+s.c+'">'+esc(s.x)+'</span>'+(indent['t'+t.id]?' <span class="pill warn">Indent</span>':'')+'</td>'
      +'<td class="no-print"><button class="b-flag" data-flag="'+esc(t.id)+'" aria-pressed="'+(!!indent['t'+t.id])+'">Indent</button></td></tr>'}).join('')+'</tbody></table></div>';
 }
+/* ---------- Progress bobot biaya: plan, actual, forecast ---------- */
+const KP='wc-prog', XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+let PG=null, pa={}, pf={}, pgW=null, pgQ='', pgBill='', pgArea='', pgOnly=true, pgMsg=null, pgBulk=null, P=null;
+const pp=v=>(Math.round(v*100)/100).toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2});
+function loadXlsxLib(){return window.XLSX?Promise.resolve(window.XLSX):new Promise((ok,no)=>{const s=document.createElement('script');s.src=XLSX_URL;
+  s.onload=()=>ok(window.XLSX);s.onerror=()=>no(new Error('Pembaca Excel gagal dimuat. Periksa koneksi internet lalu coba lagi.'));document.head.appendChild(s)})}
+function cellDn(v){
+  if(v instanceof Date)return dn(v.getFullYear(),v.getMonth()+1,v.getDate());
+  if(typeof v==='number')return v>30000&&v<80000?Math.round(v)-25569:null;
+  if(typeof v==='string'){const m=v.match(/^Date\((\d+),(\d+),(\d+)/);return m?dn(+m[1],+m[2]+1,+m[3]):parseDate(v)}
+  return null;
+}
+const MONRE=/\b(jan|feb|mar|apr|mei|may|jun|jul|agu|aug|agt|sep|okt|oct|nov|des|dec)/i;
+function parsePG(g){
+  const low=v=>String(v==null?'':v).trim().toLowerCase();
+  let h=-1,col={};
+  for(let i=0;i<Math.min(g.length,40)&&h<0;i++){const c={};
+    (g[i]||[]).forEach((v,j)=>{const s=low(v);
+      if(['item description','description','uraian','uraian pekerjaan'].includes(s))c.desc=j;
+      else if(['weight','bobot','bobot (%)','weight (%)'].includes(s))c.w=j;
+      else if(['item','no','no.'].includes(s)&&!('code' in c))c.code=j;
+      else if(s==='area'||s==='lokasi')c.area=j;
+      else if(s==='start'||s==='mulai')c.s=j;
+      else if(s==='finish'||s==='selesai')c.f=j});
+    if('desc' in c&&'w' in c){h=i;col=c}}
+  if(h<0)throw new Error('Judul kolom "ITEM DESCRIPTION" dan "WEIGHT" tidak ditemukan. Pastikan file yang diunggah adalah Progress Control.');
+  let dr=-1,wc=[];
+  for(let i=h;i<Math.min(g.length,h+10)&&dr<0;i++){const js=[];
+    (g[i]||[]).forEach((v,j)=>{if(j>col.w&&(v instanceof Date||(typeof v==='number'&&v>30000&&v<80000)))js.push(j)});
+    if(js.length>=4){dr=i;wc=js}}
+  if(dr<0)throw new Error('Baris tanggal minggu (di bawah judul WEEK) tidak ditemukan.');
+  let nr=null,mr=null;
+  for(let i=h;i<dr;i++){const r=g[i]||[];
+    if(wc.filter(j=>Number.isInteger(r[j])).length>=4)nr=i;
+    if(wc.filter(j=>typeof r[j]==='string'&&MONRE.test(r[j])).length>=2)mr=i}
+  const weeks=wc.map(j=>({d:cellDn(g[dr][j]),n:nr!=null&&Number.isInteger(g[nr][j])?g[nr][j]:null,m:''}));
+  for(let k=1;k<weeks.length;k++)if(weeks[k].n==null&&weeks[k-1].n!=null)weeks[k].n=weeks[k-1].n+1;
+  for(let k=weeks.length-2;k>=0;k--)if(weeks[k].n==null&&weeks[k+1].n!=null)weeks[k].n=weeks[k+1].n-1;
+  weeks.forEach((w,k)=>{if(w.n==null)w.n=k});
+  let lm='';if(mr!=null)wc.forEach((j,k)=>{const v=g[mr][j];if(typeof v==='string'&&v.trim())lm=v.trim();weeks[k].m=lm});
+  const items=[];let bill='',sec='',sub='';
+  for(let i=dr+1;i<g.length;i++){const r=g[i]||[];const desc=String(r[col.desc]==null?'':r[col.desc]).trim();
+    if(low(desc)==='total')break;
+    const code='code' in col&&r[col.code]!=null?String(r[col.code]).trim():'';const w=num(r[col.w]);
+    if(/^bill\b/i.test(desc)){bill=desc;sec='';sub='';continue}
+    if(!(w>0)){if(/^\d+(\.\d+)+$/.test(code)){sec=desc;sub=''}else if(desc)sub=desc;continue}
+    const plan=wc.map(j=>num(r[j])||0);let a=plan.findIndex(x=>x!==0),b=plan.length-1;while(b>a&&plan[b]===0)b--;
+    if(a<0){a=0;b=-1}
+    const area='area' in col&&r[col.area]!=null?String(r[col.area]).trim():'';
+    const x=/\(mep\)/i.test(area)||/\bmep\b/i.test(bill)?'MEP':/prelim/i.test(bill+' '+area)?'Umum':'CSA';
+    items.push({k:'r'+(i+1),c:code,d:desc,b:bill,s:sec,u:sub,a:area,x,w,ps:a,p:plan.slice(a,b+1),sd:'s' in col?cellDn(r[col.s]):null,fd:'f' in col?cellDn(r[col.f]):null});
+  }
+  if(!items.length)throw new Error('Tidak ada item berbobot yang terbaca.');
+  return {items,weeks};
+}
+function pgWk(i){const W=PG.weeks,L=W.length-1;if(i<=L)return W[i];const d=W[L].d+7*(i-L);const x=n2d(d);return {d,n:W[L].n+(i-L),m:BLN[x.getUTCMonth()]+' '+x.getUTCFullYear()}}
+function pgIdx(x){const W=PG.weeks;if(x<W[0].d+7)return 0;for(let k=0;k<W.length;k++)if(W[k].d<=x&&x<W[k].d+7)return k;const L=W.length-1;return x<W[L].d?L:L+Math.ceil((x-W[L].d-6)/7)}
+const pgCur=()=>Math.min(pgIdx(TODAY),PG.weeks.length-1);
+function pgCompute(){
+  const NW=PG.weeks.length,cur=pgW,H=NW+40,its=PG.items.filter(it=>!discF||it.x===discF);
+  const tot=its.reduce((s,it)=>s+it.w,0)||1;
+  const ent={};for(const w in pa){const wi=+w;for(const k in pa[w])(ent[k]||(ent[k]=[])).push([wi,pa[w][k]])}
+  for(const k in ent)ent[k].sort((a,b)=>a[0]-b[0]);
+  const plan=Array(H).fill(0),act=Array(cur+1).fill(0),fcw=Array(H).fill(0);
+  for(const it of its){
+    for(let j=0;j<it.p.length;j++)plan[it.ps+j]+=it.p[j];
+    const e=ent[it.k]||[];let prev=0,q=0;
+    for(let i=0;i<=cur;i++){while(q<e.length&&e[q][0]<=i){prev=e[q][1];q++}act[i]+=it.w*prev/100}
+    it.ac=prev;it.pc=0;for(let j=0;j<it.p.length&&it.ps+j<=cur;j++)it.pc+=it.p[j];it.pcp=it.w?Math.min(100,it.pc/it.w*100):0;
+    it.own=pa[cur]&&pa[cur][it.k]!=null;
+    const rem=it.w*Math.max(0,100-prev)/100;it.fe=null;
+    if(rem>1e-12){const dist=[],fo=pf[it.k]?parseDate(pf[it.k]):null;
+      if(fo!=null){const z=Math.max(cur+1,pgIdx(fo));for(let i=cur+1;i<=z&&i<H;i++)dist.push([i,1])}
+      else{for(let j=0;j<it.p.length;j++){const i=it.ps+j;if(i>cur&&it.p[j]>0)dist.push([i,it.p[j]])}
+        if(!dist.length)for(let i=cur+1;i<=cur+cfg.pgCatch&&i<H;i++)dist.push([i,1])}
+      const s=dist.reduce((a,b)=>a+b[1],0);for(const [i,x] of dist)fcw[i]+=rem*x/s;it.fe=dist.length?dist[dist.length-1][0]:null}
+  }
+  for(let i=cur;i>0;i--)act[i]-=act[i-1];
+  const pc=[],ac=[],fc=[];let a=0,b=0;
+  for(let i=0;i<H;i++){a+=plan[i];pc.push(a/tot*100)}
+  for(let i=0;i<=cur;i++){b+=act[i];ac.push(b/tot*100)}
+  let f=b;for(let i=0;i<H;i++){if(i>cur)f+=fcw[i];fc.push(i<=cur?ac[i]:f/tot*100)}
+  let lastP=0;for(let i=0;i<H;i++)if(plan[i]>1e-12)lastP=i;
+  let fEnd=null;for(let i=0;i<H;i++)if(fc[i]>=99.995){fEnd=i;break}
+  const HH=Math.min(H,Math.max(NW,(fEnd==null?H-1:fEnd)+1,lastP+1));
+  P={its,tot,cur,plan:plan.map(x=>x/tot*100),act:act.map(x=>x/tot*100),fcw:fcw.map(x=>x/tot*100),pc,ac,fc,lastP,fEnd,HH};
+}
+function pgChart(){
+  const n=P.HH,W=Math.max(720,n*24+60),Hh=260,L=40,top=12,ph=Hh-30-top,bw=(W-L-10)/n;
+  const X=i=>L+bw*(i+0.5),Y=v=>top+ph-Math.max(0,Math.min(100,v))/100*ph;
+  let s='<svg viewBox="0 0 '+W+' '+Hh+'" width="'+W+'" height="'+Hh+'" role="img" aria-label="Kurva S rencana, aktual, dan forecast">';
+  for(let v=0;v<=100;v+=25)s+='<line x1="'+L+'" x2="'+(W-10)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(Y(v)+3)+'" text-anchor="end">'+v+'%</text>';
+  s+='<rect x="'+(X(P.cur)-bw/2)+'" y="'+top+'" width="'+bw+'" height="'+ph+'" fill="var(--accent-soft)"/>';
+  for(let i=0;i<n;i++){const h1=P.plan[i]/100*ph*4,h2=i<=P.cur?P.act[i]/100*ph*4:0;
+    if(h1>0)s+='<rect x="'+(X(i)-bw*0.35)+'" y="'+(top+ph-h1)+'" width="'+(bw*0.33)+'" height="'+h1+'" fill="var(--idle)"><title>Rencana '+wl(pgWk(i).n)+': '+pp(P.plan[i])+'%</title></rect>';
+    if(h2>0)s+='<rect x="'+(X(i)+bw*0.02)+'" y="'+(top+ph-h2)+'" width="'+(bw*0.33)+'" height="'+h2+'" fill="var(--ok)" opacity=".55"><title>Aktual '+wl(pgWk(i).n)+': '+pp(P.act[i])+'%</title></rect>';
+    if(i%2===0||n<=20)s+='<text x="'+X(i)+'" y="'+(Hh-12)+'" text-anchor="middle"'+(i===P.cur?' style="fill:var(--accent);font-weight:600"':'')+'>'+pgWk(i).n+'</text>'}
+  const line=(arr,a,b,c,dash,w)=>{let d='';for(let i=a;i<=b&&i<arr.length;i++)d+=(d?'L':'M')+X(i).toFixed(1)+' '+Y(arr[i]).toFixed(1);return d?'<path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="6 4"':'')+'/>':''};
+  s+=line(P.pc,0,n-1,'var(--fg)',false,2)+line(P.fc,P.cur,n-1,'var(--warn)',true,2.5)+line(P.ac,0,P.cur,'var(--ok)',false,3);
+  s+='<circle cx="'+X(P.cur)+'" cy="'+Y(P.ac[P.cur])+'" r="4" fill="var(--ok)"/>';
+  return s+'</svg>';
+}
+function pgGroup(key){const g={};for(const it of P.its){const k=it[key]||'(tanpa area)';const o=g[k]||(g[k]={w:0,pc:0,ac:0});o.w+=it.w;o.pc+=it.pc;o.ac+=it.w*it.ac/100}return g}
+function pgSum(){
+  const cur=P.cur,wk=pgWk(cur),dev=P.ac[cur]-P.pc[cur],spi=P.pc[cur]>0?P.ac[cur]/P.pc[cur]:null;
+  const fE=P.fEnd,lag=fE==null?null:fE-P.lastP;
+  let h='<div><h2 style="font-size:20px">Progress Mingguan'+(cfg.project?' · '+esc(cfg.project):'')+'</h2><p class="note">'+(cfg.client?'Client: '+esc(cfg.client)+' · ':'')+'Status s/d '+wl(wk.n)+' ('+fmt(wk.d)+' s/d '+fmt(wk.d+6)+') · Disiplin: '+(discF?esc(discF):'Semua')+' · '+P.its.length+' item, bobot '+pp(P.tot)+'% dari total · Dicetak '+fmt(TODAY)+'</p></div>';
+  h+='<div class="kpis">'
+   +'<div class="kpi"><div class="l">Rencana kumulatif</div><div class="v">'+pp(P.pc[cur])+'%</div><div class="s">minggu ini '+pp(P.plan[cur])+'%</div></div>'
+   +'<div class="kpi"><div class="l">Aktual kumulatif</div><div class="v" style="color:var(--ok)">'+pp(P.ac[cur])+'%</div><div class="s">minggu ini '+pp(P.act[cur])+'%</div></div>'
+   +'<div class="kpi"><div class="l">Deviasi</div><div class="v" style="color:'+(dev<-0.005?'var(--crit)':'var(--ok)')+'">'+(dev>0?'+':'')+pp(dev)+'%</div><div class="s">'+(dev<-0.005?'terlambat dari rencana':'sesuai atau di depan rencana')+'</div></div>'
+   +'<div class="kpi"><div class="l">SPI</div><div class="v">'+(spi==null?'-':spi.toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2}))+'</div><div class="s">aktual dibagi rencana</div></div>'
+   +'<div class="kpi"><div class="l">Forecast selesai</div><div class="v">'+(fE==null?'-':wl(pgWk(fE).n))+'</div><div class="s">'+(fE==null?'belum terhitung':lag>0?'mundur '+lag+' minggu dari rencana '+wl(pgWk(P.lastP).n):'sesuai rencana '+wl(pgWk(P.lastP).n))+'</div></div></div>';
+  h+='<h3>Kurva S</h3><div class="legend"><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>Rencana kumulatif</span><span><i style="background:var(--ok);height:3px;vertical-align:3px"></i>Aktual kumulatif</span><span><i style="background:var(--warn);height:2px;vertical-align:3px"></i>Forecast kumulatif</span><span><i style="background:var(--idle)"></i>Rencana mingguan</span><span><i style="background:var(--ok);opacity:.55"></i>Aktual mingguan</span><span><i style="background:var(--accent-soft)"></i>Minggu laporan</span></div><div class="scroll">'+pgChart()+'</div>'
+   +'<p class="note">Batang mingguan digambar 4 kali skala sumbu supaya terbaca.</p>';
+  h+='<h3>Tabel mingguan</h3><div class="scroll" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>Minggu</th><th>Tanggal</th><th>Bulan</th><th class="num">Rencana</th><th class="num">Rencana kum.</th><th class="num">Aktual</th><th class="num">Aktual kum.</th><th class="num">Forecast</th><th class="num">Forecast kum.</th><th class="num">Deviasi kum.</th></tr></thead><tbody>';
+  for(let i=0;i<P.HH;i++){const w=pgWk(i),past=i<=cur,dv=past?P.ac[i]-P.pc[i]:P.fc[i]-P.pc[i];
+    h+='<tr'+(i===cur?' style="background:var(--accent-soft)"':'')+'><td>'+wl(w.n)+'</td><td style="white-space:nowrap">'+fmt(w.d)+'</td><td>'+esc(w.m)+'</td><td class="num">'+pp(P.plan[i])+'</td><td class="num">'+pp(P.pc[i])+'</td>'
+     +'<td class="num">'+(past?pp(P.act[i]):'')+'</td><td class="num">'+(past?pp(P.ac[i]):'')+'</td><td class="num">'+(past?'':pp(P.fcw[i]))+'</td><td class="num">'+pp(P.fc[i])+'</td>'
+     +'<td class="num">'+(Math.abs(dv)<0.005?'0,00':'<span class="pill '+(dv<0?'crit':'ok')+'">'+(dv>0?'+':'')+pp(dv)+'</span>')+'</td></tr>'}
+  h+='</tbody></table></div><p class="note">Deviasi sampai minggu laporan memakai aktual; sesudahnya memakai forecast.</p>';
+  const mo=[];for(let i=0;i<P.HH;i++){const m=pgWk(i).m||'-';let o=mo[mo.length-1];if(!o||o.m!==m){o={m,a:i,b:i};mo.push(o)}o.b=i}
+  h+='<h3>Rekap bulanan</h3><div class="scroll"><table><thead><tr><th>Bulan</th><th>Minggu</th><th class="num">Rencana</th><th class="num">Aktual</th><th class="num">Forecast</th><th class="num">Rencana kum.</th><th class="num">Aktual / forecast kum.</th></tr></thead><tbody>'
+   +mo.map(o=>{let p=0,a=0,f=0;for(let i=o.a;i<=o.b;i++){p+=P.plan[i];if(i<=cur)a+=P.act[i];else f+=P.fcw[i]}
+     return '<tr><td>'+esc(o.m)+'</td><td>'+wl(pgWk(o.a).n)+(o.b>o.a?' - '+wl(pgWk(o.b).n):'')+'</td><td class="num">'+pp(p)+'</td><td class="num">'+(o.a<=cur?pp(a):'')+'</td><td class="num">'+(o.b>cur?pp(f):'')+'</td><td class="num">'+pp(P.pc[o.b])+'</td><td class="num">'+pp(P.fc[o.b])+'</td></tr>'}).join('')+'</tbody></table></div>';
+  const tbl=(title,key)=>{const g=pgGroup(key);return '<h3>'+title+'</h3><div class="scroll"><table><thead><tr><th>'+(key==='b'?'Bill':'Area')+'</th><th class="num">Bobot</th><th class="num">Rencana kum.</th><th class="num">Aktual kum.</th><th class="num">Deviasi</th><th>Progres bagian ini</th><th class="num">%</th></tr></thead><tbody>'
+    +Object.entries(g).map(([k,o])=>{const d=(o.ac-o.pc)/P.tot*100;return '<tr><td>'+esc(k)+'</td><td class="num">'+pp(o.w/P.tot*100)+'</td><td class="num">'+pp(o.pc/P.tot*100)+'</td><td class="num">'+pp(o.ac/P.tot*100)+'</td><td class="num">'+(d<-0.005?'<span class="pill crit">'+pp(d)+'</span>':pp(d))+'</td><td><div class="bar"><span style="width:'+Math.min(100,o.ac/o.w*100)+'%"></span></div></td><td class="num">'+pp(o.ac/o.w*100)+'</td></tr>'}).join('')+'</tbody></table></div>'};
+  h+=tbl('Per bill','b')+tbl('Per area','a')+'<p class="note">Bobot, rencana, aktual, dan deviasi dalam persen terhadap total proyek'+(discF?' disiplin '+esc(discF):'')+'. Kolom % adalah progres bagian itu sendiri.</p>';
+  return h;
+}
+const pgActive=it=>(it.ac>0&&it.ac<100)||(it.pcp>it.ac+0.01)||it.p.some((x,j)=>x>0&&Math.abs(it.ps+j-P.cur)<=1)||it.own;
+function pgDev(it){const d=it.ac-it.pcp;return Math.abs(d)<0.005?'0,00':'<span class="pill '+(d<0?'crit':'ok')+'">'+(d>0?'+':'')+pp(d)+'</span>'}
+const pgFe=it=>it.ac>=100?'Selesai':it.fe==null?'-':wl(pgWk(it.fe).n)+(pf[it.k]?' (diatur)':'');
+function pgList(){const t=pgQ.toLowerCase().split(/\s+/).filter(Boolean);
+  return P.its.filter(it=>(!pgBill||it.b===pgBill)&&(!pgArea||(it.a||'(tanpa area)')===pgArea)&&(!pgOnly||pgActive(it))
+    &&t.every(s=>(it.c+' '+it.d+' '+it.s+' '+it.u+' '+it.a).toLowerCase().includes(s)))}
+function pgEntry(){
+  const cur=P.cur,wk=pgWk(cur),list=pgList(),bills=[...new Set(P.its.map(i=>i.b))],areas=[...new Set(P.its.map(i=>i.a||'(tanpa area)'))].sort();
+  const sel=(id,cur,arr,all)=>'<select id="'+id+'"><option value="">'+all+'</option>'+arr.map(v=>'<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select>';
+  let h='<div class="panel"><div class="panel-h"><h2>Input aktual '+wl(wk.n)+'</h2><p>Isi persen selesai kumulatif tiap item sampai akhir '+wl(wk.n)+'. Item yang tidak diisi memakai angka minggu sebelumnya.</p></div>'
+   +'<div class="btnrow"><label>Cari item<input id="pg-q" value="'+esc(pgQ)+'" placeholder="uraian, kode, area"></label><label>Bill'+sel('pg-bill',pgBill,bills,'Semua bill')+'</label><label>Area'+sel('pg-area',pgArea,areas,'Semua area')+'</label>'
+   +'<label style="flex-direction:row;align-items:center;gap:6px;min-width:0"><input type="checkbox" id="pg-only"'+(pgOnly?' checked':'')+'> Hanya item aktif sekitar minggu ini</label></div>'
+   +'<div class="btnrow" style="margin-top:8px"><span class="note">'+list.length+' item tampil.</span><span class="spacer"></span>'
+   +(pgBulk!=null?'<span>Isi '+list.length+' item yang tampil dengan '+pp(pgBulk)+'%?</span><button id="pg-bulk-yes" class="b-miss" aria-pressed="true">Ya, isi</button><button id="pg-bulk-no">Batal</button>'
+     :'<label style="flex-direction:row;align-items:center;gap:6px;min-width:0">Isi semua yang tampil<input id="pg-bulkv" type="number" min="0" max="100" step="any" style="width:80px">%</label><button id="pg-bulk"'+(list.length?'':' disabled')+'>Terapkan</button>')+'</div>';
+  if(!list.length)h+='<div class="empty">Tidak ada item yang cocok dengan filter.</div>';
+  else{h+='<div class="scroll" style="max-height:560px;overflow-y:auto"><table><thead><tr><th>Item</th><th>Uraian</th><th>Area</th><th class="num">Bobot</th><th class="num">Rencana s/d '+wl(wk.n)+'</th><th>Aktual kum. %</th><th class="num">Deviasi</th><th>Forecast selesai</th></tr></thead><tbody>';
+    let lb=null,ls=null;
+    for(const it of list.slice(0,400)){
+      if(it.b!==lb){h+='<tr><td colspan="8" class="grp">'+esc(it.b)+'</td></tr>';lb=it.b;ls=null}
+      if(it.s!==ls&&it.s){h+='<tr><td colspan="8" style="font-weight:600">'+esc(it.s)+'</td></tr>';ls=it.s}
+      h+='<tr><td>'+esc(it.c)+'</td><td>'+esc(it.d)+(it.u?'<br><small style="color:var(--muted)">'+esc(it.u)+'</small>':'')+'</td><td><small>'+esc(it.a)+'</small></td><td class="num">'+pp(it.w)+'</td>'
+       +'<td class="num">'+pp(it.pcp)+'%</td><td><input type="number" min="0" max="100" step="any" style="width:84px" data-pa="'+it.k+'" value="'+(it.own?pa[cur][it.k]:'')+'" placeholder="'+(it.own?'':pp(it.ac))+'"></td>'
+       +'<td class="num" id="pgd-'+it.k+'">'+pgDev(it)+'</td><td style="white-space:nowrap"><input type="date" data-pf="'+it.k+'" value="'+esc(pf[it.k]||'')+'" title="Kosongkan untuk dihitung otomatis"> <small id="pgf-'+it.k+'">'+pgFe(it)+'</small></td></tr>'}
+    h+='</tbody></table></div>'+(list.length>400?'<p class="note">Menampilkan 400 item pertama. Persempit dengan pencarian, bill, atau area.</p>':'')}
+  return h+'<p class="note">Forecast: sisa pekerjaan tiap item disebar ke minggu rencana yang belum lewat, sebanding rencananya. Item yang minggu rencananya sudah lewat diselesaikan dalam '+cfg.pgCatch+' minggu berikutnya. Isi tanggal forecast selesai untuk mengaturnya sendiri.</p></div>';
+}
+function vPg(){
+  if(!PG)return '<div class="panel">'+(pgMsg?'<div class="alert '+pgMsg.lv+'">'+esc(pgMsg.txt)+'</div>':'')+'<h2>Belum ada data Progress Control</h2><p class="note">Unggah file Excel Progress Control yang berisi kolom ITEM DESCRIPTION, WEIGHT, dan rencana bobot per minggu (WEEK) dengan baris tanggal minggu di bawah judulnya. Rencana dibaca dari angka per minggu di file; aktual diisi di halaman ini.</p><div class="btnrow"><button class="primary" id="pg-up">Unggah Progress Control (.xlsx)</button></div></div>';
+  if(pgW==null)pgW=pgCur();pgW=Math.min(Math.max(pgW,0),PG.weeks.length+30);pgCompute();
+  let opt='';for(let i=0;i<Math.max(PG.weeks.length,pgW+1);i++){const w=pgWk(i);opt+='<option value="'+i+'"'+(i===pgW?' selected':'')+'>'+wl(w.n)+' · '+fmt(w.d)+(i===pgCur()?' (minggu ini)':'')+'</option>'}
+  let h='<div class="panel no-print">'+(pgMsg?'<div class="alert '+pgMsg.lv+'">'+esc(pgMsg.txt)+'</div>':'')
+   +'<div class="btnrow"><label>Minggu laporan<select id="pg-w">'+opt+'</select></label>'
+   +'<label>Item terlambat diselesaikan dalam<select id="pg-catch">'+[1,2,3,4,6,8].map(v=>'<option value="'+v+'"'+(v===cfg.pgCatch?' selected':'')+'>'+v+' minggu</option>').join('')+'</select></label>'
+   +'<span class="spacer"></span><button id="pg-up">Ganti file</button><button class="primary" id="pg-print">Cetak / Simpan PDF</button></div>'
+   +'<p class="note">Sumber rencana: '+esc(PG.src||'file')+', '+PG.items.length+' item, '+PG.weeks.length+' minggu. File ini hanya tersimpan di browser ini; aktual ikut tersimpan ke Google Sheet bila sudah dihubungkan.</p></div>';
+  return h+'<div class="panel" style="margin-top:18px" id="pg-sum">'+pgSum()+'</div><div id="pg-entry" class="no-print" style="margin-top:18px">'+pgEntry()+'</div>';
+}
+function pgRefresh(k){pgCompute();$('pg-sum').innerHTML=pgSum();const it=P.its.find(i=>i.k===k);if(it){const a=$('pgd-'+k),b=$('pgf-'+k);if(a)a.innerHTML=pgDev(it);if(b)b.textContent=pgFe(it)}}
+async function pgLoadFile(f){
+  try{const X=await loadXlsxLib();const buf=await f.arrayBuffer();const wb=X.read(buf,{type:'array'});let res=null,err=null;
+    for(const n of wb.SheetNames){const ws=wb.Sheets[n];if(!ws['!ref'])continue;const r=X.utils.decode_range(ws['!ref']);ws['!ref']=X.utils.encode_range({s:{r:0,c:0},e:r.e});
+      try{res=parsePG(X.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:true}));res.sheet=n;break}catch(x){err=x}}
+    if(!res)throw err||new Error('Tidak ada sheet yang terbaca.');
+    res.src=f.name+' (sheet '+res.sheet+')';PG=res;sv(KP,PG);pgW=pgCur();
+    const sw=PG.items.reduce((s,i)=>s+i.w,0);pgMsg={lv:'ok',txt:PG.items.length+' item dimuat dari '+f.name+', total bobot '+pp(sw)+'%, '+PG.weeks.length+' minggu rencana.'}}
+  catch(x){pgMsg={lv:'crit',txt:x.message}}
+  render();
+}
 function vSet(){
   let h='';
   if(msg)h+='<div class="alert '+msg.lv+'" style="margin-bottom:14px">'+esc(msg.txt)+'</div>';
@@ -581,17 +763,18 @@ function render(){
   compute(); selW=Math.min(Math.max(selW,1),C.maxW);
   const dc=$('d-cand'),wasOpen=dc&&dc.open;
   $('v-dash').innerHTML=view==='dash'?vDash():''; $('v-week').innerHTML=view==='week'?vWeek():'';
-  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():''; $('v-la').innerHTML=view==='la'?vLa():''; $('v-cari').innerHTML=view==='cari'?vCari():'';
+  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():''; $('v-la').innerHTML=view==='la'?vLa():''; $('v-pg').innerHTML=view==='pg'?vPg():''; $('v-cari').innerHTML=view==='cari'?vCari():'';
   if(wasOpen&&$('d-cand'))$('d-cand').open=true;
-  for(const v of ['dash','week','la','ind','rep','set','cari']){$('v-'+v).hidden=view!==v;const tb=$('tab-'+v);if(tb)tb.setAttribute('aria-selected',view===v)}
+  for(const v of ['dash','week','la','pg','ind','rep','set','cari']){$('v-'+v).hidden=view!==v;const tb=$('tab-'+v);if(tb)tb.setAttribute('aria-selected',view===v)}
   if(jump){const r=$('row-'+jump);if(r&&r.scrollIntoView){r.scrollIntoView({block:'center'});r.classList.add('flash')}jump=null}
   const n=indList().filter(i=>i.al.lv).length,b=$('ind-n');b.hidden=!n;b.textContent=n;
   $('h-title').textContent=cfg.project||'Kontrol Mingguan';
   sub();
   document.title=cfg.project?cfg.project+' · Kontrol Mingguan':'Kontrol Mingguan';
-  const show=DISCS.length>0&&view!=='set'; $('discbar').hidden=!show;
-  if(show){const c={};for(const t of T)c[t.disc]=(c[t.disc]||0)+1;
-    $('discchips').innerHTML='<span class="lab">Disiplin</span><button class="chip" data-disc="" aria-pressed="'+(!discF)+'">Semua ('+T.length+')</button>'+DISCS.map(d=>'<button class="chip" data-disc="'+esc(d)+'" aria-pressed="'+(discF===d)+'">'+esc(d)+' ('+c[d]+')</button>').join('')}
+  const dsrc=view==='pg'&&PG?PG.items.map(i=>i.x):T.map(t=>t.disc),dl=['CSA','MEP'].filter(d=>dsrc.includes(d));
+  const show=dl.length>0&&view!=='set'; $('discbar').hidden=!show;
+  if(show){const c={};for(const x of dsrc)c[x]=(c[x]||0)+1;
+    $('discchips').innerHTML='<span class="lab">Disiplin</span><button class="chip" data-disc="" aria-pressed="'+(!discF)+'">Semua ('+dsrc.length+')</button>'+dl.map(d=>'<button class="chip" data-disc="'+esc(d)+'" aria-pressed="'+(discF===d)+'">'+esc(d)+' ('+c[d]+')</button>').join('')}
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
@@ -611,12 +794,16 @@ document.addEventListener('click',e=>{
     case 'ind-add':indent['m'+Date.now().toString(36)]={name:'Barang baru',task:'',lead:cfg.lead,need:n2iso(TODAY+cfg.lead*7),status:'belum'};saveState();break;
     case 's-load':loadSheet();return;
     case 's-sync':pull(true);return;
-    case 'r-print':case 'la-print':window.print();return;
+    case 'r-print':case 'la-print':case 'pg-print':window.print();return;
+    case 'pg-up':$('f-xlsx').click();return;
+    case 'pg-bulk':{const v=num(($('pg-bulkv')||{}).value);if(v==null)return;pgBulk=Math.max(0,Math.min(100,v));break}
+    case 'pg-bulk-no':pgBulk=null;break;
+    case 'pg-bulk-yes':{const m=pa[pgW]||(pa[pgW]={});for(const it of pgList())m[it.k]=pgBulk;pgBulk=null;saveState();break}
     case 'q-clear':q='';$('q').value='';view=prevView;break;
     case 's-csv':$('f-csv').click();return;
     case 's-import':$('f-json').click();return;
     case 's-sample':setData(sampleRows(),'data contoh');msg={lv:'warn',txt:'Data contoh dimuat. Ini bukan jadwal Anda; ganti dengan Google Sheet atau CSV sendiri.'};view=view==='set'?'set':'dash';break;
-    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent,vols,reals},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
+    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent,vols,reals,pa,pf},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
     case 's-reset':confirmReset=true;break;case 's-reset-no':confirmReset=false;break;
     case 's-reset-yes':confirmReset=false;marks={};indent={};reals={};saveState();msg={lv:'ok',txt:'Semua tandaan dan barang indent dihapus.'};break;
     default:return;
@@ -626,12 +813,21 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const el=e.target;
   if(el.id==='w-sel'){selW=+el.value;confirmClose=false;render();return}
+  if(el.id==='f-xlsx'&&el.files[0]){const f=el.files[0];el.value='';pgLoadFile(f);return}
+  if(el.id==='pg-w'){pgW=+el.value;pgBulk=null;render();return}
+  if(el.id==='pg-catch'){cfg.pgCatch=+el.value;sv(K.cfg,cfg);render();return}
+  if(el.id==='pg-q'){pgQ=el.value;render();return}
+  if(el.id==='pg-bill'){pgBill=el.value;render();return}
+  if(el.id==='pg-area'){pgArea=el.value;render();return}
+  if(el.id==='pg-only'){pgOnly=el.checked;render();return}
+  if(el.dataset.pa!=null){const k=el.dataset.pa,v=num(el.value),m=pa[pgW]||(pa[pgW]={});if(v==null)delete m[k];else m[k]=Math.max(0,Math.min(100,v));saveState();pgRefresh(k);return}
+  if(el.dataset.pf!=null){const k=el.dataset.pf;if(el.value)pf[k]=el.value;else delete pf[k];saveState();pgRefresh(k);return}
   if(el.id==='la-from'){laFrom=+el.value;render();return}
   if(el.id==='la-n'||el.id==='la-prep'||el.id==='la-mode'){const k={'la-n':'laN','la-prep':'laPrep','la-mode':'laMode'}[el.id];cfg[k]=k==='laMode'?el.value:+el.value;sv(K.cfg,cfg);render();return}
   if(el.id==='r-from'){repFrom=+el.value;if(repTo<repFrom)repTo=repFrom;render();return}
   if(el.id==='r-to'){repTo=+el.value;if(repTo<repFrom)repFrom=repTo;render();return}
   if(el.id==='f-csv'&&el.files[0]){const f=el.files[0];readFile(f,t=>{try{const r=rowsFromCSV(t);setData(r.rows,'file '+f.name);msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari '+f.name+(r.skip?', '+r.skip+' baris dilewati':'')+'.'}}catch(x){msg={lv:'crit',txt:x.message}}el.value='';render()});return}
-  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
+  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};pa=o.pa||{};pf=o.pf||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
   if(el.dataset.cfg){const k=el.dataset.cfg;cfg[k]=k==='lead'?Math.max(0,Math.min(80,Math.round(+el.value||0))):el.value.trim();sv(K.cfg,cfg);if(k==='w1'){build();selW=CUR}render();return}
   if(el.dataset.real!=null){const k=el.dataset.real,v=num(el.value),r=reals[selW]||(reals[selW]={});
     if(v==null)delete r[k];else{r[k]=Math.max(0,v);if(marks[selW])delete marks[selW][k]}saveState();render();return}
@@ -647,8 +843,8 @@ document.addEventListener('change',e=>{
 document.addEventListener('input',e=>{if(e.target.id!=='q')return;q=e.target.value;
   if(q.trim()){if(view!=='cari')prevView=view;view='cari'}else if(view==='cari')view=prevView;render()});
 document.addEventListener('keydown',e=>{if(e.target.id==='q'&&e.key==='Escape'&&q){q='';e.target.value='';view=prevView;render()}});
-cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};reals=s.reals||{};stTs=s.ts||0}
-build(); selW=CUR; if(!T.length)view='set'; render(); if(cfg.sync)pull();
+cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};reals=s.reals||{};pa=s.pa||{};pf=s.pf||{};stTs=s.ts||0}
+PG=ld(KP,null); build(); selW=CUR; if(!T.length&&!PG)view='set'; render(); if(cfg.sync)pull();
 </script>
 </body>
 </html>

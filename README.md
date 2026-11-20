@@ -10,6 +10,7 @@ Aplikasi web satu halaman untuk mengontrol pencapaian jadwal proyek per minggu. 
 - Barang indent: batas pesan dihitung dari tanggal butuh dikurangi lead time, dengan peringatan 14 hari sebelumnya.
 - Pencarian task berdasarkan nama, ID, area, atau minggu (`W12`), dengan status dan minggu pelaksanaannya.
 - Lookahead: task yang mulai atau aktif di 1 sampai 12 minggu ke depan atau semua minggu, dengan masa persiapan 1 sampai 4 minggu sebelum mulai.
+- Progress berbobot biaya: unggah file Progress Control (.xlsx) berisi bobot dan rencana per minggu, isi persen selesai aktual per item, lalu lihat rencana, aktual, forecast, deviasi, SPI, kurva S, rekap bulanan, dan rekap per bill dan area.
 - Laporan untuk satu atau beberapa minggu, dicetak atau disimpan sebagai PDF lewat dialog cetak browser.
 
 ## Format Google Sheet jadwal
