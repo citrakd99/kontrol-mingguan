@@ -101,11 +101,13 @@ code{background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px
 #q{flex:1 1 220px;max-width:360px;min-width:0}
 .row.flash{background:var(--warn-soft);border-radius:6px}
 @media (prefers-reduced-motion:no-preference){.row.flash{transition:background 2s}}
+.print-only{display:none}
 h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
 .btnrow label{min-width:200px}
 @media print{
   :root{--bg:#fff;--surface:#fff;--surface2:#eceff3;--line:#c9d0da;--fg:#111;--muted:#444;--accent:#1f5f8b;--accent-fg:#fff;--accent-soft:#dbe9f3;
     --ok:#2c7a4b;--ok-soft:#dcefe3;--warn:#a8690a;--warn-soft:#f8ecd2;--crit:#b3362b;--crit-soft:#f8dedb;--idle:#b9c3d0;color-scheme:light}
+  .print-only{display:block!important}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   header,.no-print,main>section[hidden]{display:none!important}
   body{font-size:11px} main.wrap{max-width:none;padding:0}
@@ -130,6 +132,7 @@ h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
       <button class="tab" role="tab" id="tab-week" data-view="week">Kontrol Mingguan</button>
       <button class="tab" role="tab" id="tab-la" data-view="la">Lookahead</button>
       <button class="tab" role="tab" id="tab-pg" data-view="pg">Progress</button>
+      <button class="tab" role="tab" id="tab-tg" data-view="tg">Target</button>
       <button class="tab" role="tab" id="tab-ind" data-view="ind">Barang Indent<span class="n" id="ind-n" hidden></span></button>
       <button class="tab" role="tab" id="tab-rep" data-view="rep">Laporan</button>
       <button class="tab" role="tab" id="tab-set" data-view="set">Pengaturan</button>
@@ -143,6 +146,7 @@ h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
   <section id="v-ind" hidden></section>
   <section id="v-la" hidden></section>
   <section id="v-pg" hidden></section>
+  <section id="v-tg" hidden></section>
   <section id="v-cari" hidden></section>
   <section id="v-rep" hidden></section>
   <section id="v-set" hidden></section>
@@ -260,17 +264,17 @@ const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}ca
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let stTs=0, syncMsg='', pushT=null;
 const hm=()=>new Date().toTimeString().slice(0,5);
-const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,vols,reals,pa,pf,ts:stTs});schedulePush()};
+const saveState=()=>{stTs=Date.now();sv(K.st,{marks,indent,vols,reals,pa,pf,tg,ts:stTs});schedulePush()};
 function schedulePush(){if(!cfg.sync)return;clearTimeout(pushT);pushT=setTimeout(push,1500)}
 async function push(){
-  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent,vols,reals,pa,pf})});
+  try{const r=await fetch(cfg.sync,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({ts:stTs,marks,indent,vols,reals,pa,pf,tg})});
     const o=await r.json();if(!o.ok)throw 0;syncMsg='tersimpan ke Google Sheet '+hm()}
   catch(e){syncMsg='gagal simpan ke Google Sheet, data tetap ada di browser ini'}
   sub();
 }
 async function pull(manual){
   try{const r=await fetch(cfg.sync);const o=await r.json();
-    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};pa=o.pa||{};pf=o.pf||{};stTs=o.ts;sv(K.st,{marks,indent,vols,reals,pa,pf,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
+    if(o&&o.ts>stTs&&o.marks&&typeof o.marks==='object'){marks=o.marks;indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};pa=o.pa||{};pf=o.pf||{};tg=o.tg||{};stTs=o.ts;sv(K.st,{marks,indent,vols,reals,pa,pf,tg,ts:stTs});syncMsg='data diambil dari Google Sheet '+hm()}
     else{syncMsg='terhubung ke Google Sheet';if(stTs&&!(o&&o.ts>=stTs))push()}
     if(manual)msg={lv:'ok',txt:'Terhubung. Tandaan dan barang indent sekarang ikut tersimpan ke Google Sheet.'}}
   catch(e){syncMsg='Google Sheet tidak terjangkau';if(manual)msg={lv:'crit',txt:'URL Apps Script tidak bisa dijangkau. Pastikan sudah di-deploy sebagai Web app dengan akses "Anyone".'}}
@@ -744,6 +748,132 @@ async function pgLoadFile(f){
   catch(x){pgMsg={lv:'crit',txt:x.message}}
   render();
 }
+/* ---------- Target progress: forecast manual dan list item per minggu ---------- */
+let tg={}, tgSel=null, tgQ='', tgBill='', tgArea='', tgAll=false, tgPS='sel', tgClear=false, TGE={}, TGS=null;
+const TGC=new WeakMap();
+const tgScope=()=>{const k=discF||'all';return tg[k]||(tg[k]={a:{},o:{}})};
+const tgAnch=()=>Object.keys(tgScope().a).map(Number).sort((a,b)=>a-b);
+function tgCum(it){let c=TGC.get(it);if(!c){c=new Float64Array(it.p.length);let s=0;for(let j=0;j<c.length;j++){s+=it.p[j];c[j]=Math.min(100,s/it.w*100)}TGC.set(it,c)}return c}
+function tgAt(it,x){const c=tgCum(it),n=c.length;if(!n)return x>=PG.weeks.length?100:0;
+  const v=i=>i<it.ps?0:i>=it.ps+n?100:c[i-it.ps],f=Math.floor(x);return v(f)+(x-f)*(v(f+1)-v(f))}
+function tgBuildEnt(){TGE={};for(const w in pa){const wi=+w;for(const k in pa[w])(TGE[k]||(TGE[k]=[])).push([wi,pa[w][k]])}for(const k in TGE)TGE[k].sort((a,b)=>a[0]-b[0])}
+function tgAc(k,i){let v=0;for(const [w,x] of TGE[k]||[]){if(w<=i)v=x;else break}return v}
+function tgPts(){const S=tgScope(),cur=P.cur,pts=[[cur,P.ac[cur]]];let m=P.ac[cur];
+  for(const w of tgAnch())if(w>cur){m=Math.max(m,S.a[w]);pts.push([w,m])}
+  if(pts.length>1&&m<100)pts.push([Math.max(P.lastP,pts[pts.length-1][0]+1),100]);return pts}
+function tgCurve(w){const S=tgScope();if(S.a[w]!=null)return S.a[w];if(w<=P.cur)return P.ac[w];const pts=tgPts();if(pts.length<2)return null;
+  for(let i=1;i<pts.length;i++)if(w<=pts[i][0]){const [a,b]=pts[i-1],[c,d]=pts[i];return b+(d-b)*(w-a)/(c-a)}return 100}
+function tgOne(floors,over,T){
+  const free=[];let fixed=0;
+  for(const it of P.its){const f=floors.get(it)||0;if(over[it.k]!=null)fixed+=it.w*Math.max(f,over[it.k])/100;else free.push([it,f])}
+  const val=x=>{let s=fixed;for(const [it,f] of free)s+=it.w*Math.max(f,tgAt(it,x))/100;return s};
+  const goal=T/100*P.tot;let lo=-1,hi=PG.weeks.length,x;
+  if(val(lo)>=goal-1e-9)x=lo;else if(val(hi)<goal-1e-9)x=hi;else{for(let n=0;n<38;n++){const m=(lo+hi)/2;if(val(m)>=goal)hi=m;else lo=m}x=hi}
+  const map=new Map();for(const it of P.its){const f=floors.get(it)||0;map.set(it,over[it.k]!=null?Math.max(f,over[it.k]):Math.max(f,tgAt(it,x)))}
+  return {map,got:val(x)/P.tot*100};
+}
+function tgSolve(w){
+  const S=tgScope(),base=Math.min(w-1,P.cur);let floors=new Map();
+  for(const it of P.its)floors.set(it,base<0?0:tgAc(it.k,base));
+  const T=tgCurve(w);if(T==null)return {floors,map:floors,T:null,got:null};
+  for(const q of tgAnch())if(q>base&&q<w)floors=tgOne(floors,S.o[q]||{},S.a[q]).map;
+  const r=tgOne(floors,S.o[w]||{},T);return {floors,map:r.map,T,got:r.got};
+}
+function tgChart(){
+  const n=PG.weeks.length,W=Math.max(720,n*24+60),Hh=260,L=40,top=12,ph=Hh-30-top,bw=(W-L-10)/n,S=tgScope();
+  const X=i=>L+bw*(i+0.5),Y=v=>top+ph-Math.max(0,Math.min(100,v))/100*ph;
+  let s='<svg viewBox="0 0 '+W+' '+Hh+'" width="'+W+'" height="'+Hh+'" role="img" aria-label="Kurva rencana, aktual, dan target manual">';
+  for(let v=0;v<=100;v+=25)s+='<line x1="'+L+'" x2="'+(W-10)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(Y(v)+3)+'" text-anchor="end">'+v+'%</text>';
+  s+='<rect x="'+(X(tgSel)-bw/2)+'" y="'+top+'" width="'+bw+'" height="'+ph+'" fill="var(--accent-soft)"/>';
+  for(let i=0;i<n;i++)if(i%2===0||n<=20)s+='<text x="'+X(i)+'" y="'+(Hh-12)+'" text-anchor="middle"'+(i===tgSel?' style="fill:var(--accent);font-weight:600"':'')+'>'+pgWk(i).n+'</text>';
+  const path=(pts,c,w,dash)=>{const d=pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('');return d?'<path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="6 4"':'')+'/>':''};
+  s+=path(P.pc.slice(0,n).map((v,i)=>[i,v]),'var(--fg)',2);
+  const tp=tgPts();if(tp.length>1)s+=path(tp,'var(--warn)',2.5,true);
+  s+=path(P.ac.map((v,i)=>[i,v]),'var(--ok)',3);
+  for(const w of tgAnch())if(w<n)s+='<circle cx="'+X(w)+'" cy="'+Y(S.a[w])+'" r="4.5" fill="var(--warn)"><title>Target '+wl(pgWk(w).n)+': '+pp(S.a[w])+'%</title></circle>';
+  return s+'</svg>';
+}
+function tgWarn(){const S=tgScope(),A=tgAnch(),out=[];let prev=null;
+  for(const w of A){if(prev!=null&&S.a[w]<S.a[prev])out.push('Target '+wl(pgWk(w).n)+' ('+pp(S.a[w])+'%) lebih kecil dari '+wl(pgWk(prev).n)+' ('+pp(S.a[prev])+'%).');
+    if(w>P.cur&&S.a[w]<P.ac[P.cur])out.push('Target '+wl(pgWk(w).n)+' sudah terlampaui oleh aktual saat ini.');prev=w}
+  if(TGS&&TGS.T!=null&&TGS.got<TGS.T-0.005)out.push('Target '+wl(pgWk(tgSel).n)+' tidak bisa dicapai dengan target item yang dikunci manual. Maksimal '+pp(TGS.got)+'%.');
+  return out}
+function tgStatus(i){const S=tgScope();if(S.a[i]==null)return '';if(i>P.cur)return '<span class="pill acc">Target</span>';
+  return P.ac[i]>=S.a[i]-0.005?'<span class="pill ok">Tercapai</span>':'<span class="pill crit">Kurang '+pp(S.a[i]-P.ac[i])+'%</span>'}
+function tgSum(){
+  const cur=P.cur,wk=pgWk(cur),S=tgScope(),A=tgAnch(),nx=A.find(w=>w>cur),sw=pgWk(tgSel),need=nx!=null?S.a[nx]-P.ac[cur]:null;
+  let h='<div><h2 style="font-size:20px">Target Progress'+(cfg.project?' · '+esc(cfg.project):'')+'</h2><p class="note">'+(cfg.client?'Client: '+esc(cfg.client)+' · ':'')+'Aktual s/d '+wl(wk.n)+' · Disiplin: '+(discF?esc(discF):'Semua')+' · Dicetak '+fmt(TODAY)+'</p></div>';
+  h+='<div class="kpis"><div class="kpi"><div class="l">Aktual kumulatif</div><div class="v" style="color:var(--ok)">'+pp(P.ac[cur])+'%</div><div class="s">rencana '+pp(P.pc[cur])+'%</div></div>'
+   +'<div class="kpi"><div class="l">Target berikutnya</div><div class="v">'+(nx!=null?pp(S.a[nx])+'%':'-')+'</div><div class="s">'+(nx!=null?wl(pgWk(nx).n)+' · '+fmt(pgWk(nx).d+6):'belum ada target')+'</div></div>'
+   +'<div class="kpi"><div class="l">Harus dikejar</div><div class="v">'+(need!=null?pp(Math.max(0,need))+'%':'-')+'</div><div class="s">'+(need!=null?pp(Math.max(0,need)/(nx-cur))+'% per minggu':'isi target di tabel')+'</div></div>'
+   +'<div class="kpi"><div class="l">Target '+wl(sw.n)+'</div><div class="v">'+(TGS&&TGS.T!=null?pp(TGS.T)+'%':'-')+'</div><div class="s">rencana '+pp(P.pc[tgSel])+'%</div></div></div>';
+  const wr=tgWarn();if(wr.length)h+='<div class="alerts" style="margin-top:12px">'+wr.map(x=>'<div class="alert warn">'+esc(x)+'</div>').join('')+'</div>';
+  h+='<h3>Kurva target</h3><div class="legend"><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>Rencana</span><span><i style="background:var(--ok);height:3px;vertical-align:3px"></i>Aktual</span><span><i style="background:var(--warn);height:2px;vertical-align:3px"></i>Forecast manual</span><span><i style="background:var(--warn);border-radius:50%"></i>Titik target</span><span><i style="background:var(--accent-soft)"></i>Minggu dipilih</span></div><div class="scroll">'+tgChart()+'</div>';
+  if(A.length)h+='<div class="print-only"><h3>Daftar target</h3><table><thead><tr><th>Minggu</th><th>Sampai</th><th class="num">Rencana kum.</th><th class="num">Target kum.</th><th class="num">Selisih thd rencana</th><th class="num">Aktual kum.</th></tr></thead><tbody>'
+    +A.map(w=>'<tr><td>'+wl(pgWk(w).n)+'</td><td>'+fmt(pgWk(w).d+6)+'</td><td class="num">'+pp(P.pc[w])+'</td><td class="num">'+pp(S.a[w])+'</td><td class="num">'+pp(S.a[w]-P.pc[w])+'</td><td class="num">'+(w<=cur?pp(P.ac[w]):'')+'</td></tr>').join('')+'</tbody></table></div>';
+  return h;
+}
+function tgWeeks(){
+  const S=tgScope(),n=PG.weeks.length;
+  let h='<div class="panel"><div class="panel-h"><h2>Forecast manual</h2><p>Isi target progress kumulatif pada minggu yang Anda tentukan. Minggu di antaranya dihitung garis lurus.</p><span class="spacer"></span>'
+   +(tgClear?'<span>Hapus semua target '+(discF?esc(discF):'Semua')+'?</span><button id="tg-clear-yes" class="b-miss" aria-pressed="true">Ya, hapus</button><button id="tg-clear-no">Batal</button>':'<button id="tg-clear"'+(tgAnch().length?'':' disabled')+'>Hapus semua target</button>')+'</div>'
+   +'<div class="scroll" style="max-height:380px;overflow-y:auto"><table><thead><tr><th>Minggu</th><th>Tanggal</th><th class="num">Rencana kum.</th><th class="num">Aktual kum.</th><th>Target kum. %</th><th class="num">Selisih thd rencana</th><th>Status</th><th></th></tr></thead><tbody>';
+  for(let i=0;i<n;i++){const w=pgWk(i),v=tgCurve(i);
+    h+='<tr'+(i===tgSel?' style="background:var(--accent-soft)"':'')+'><td>'+wl(w.n)+'</td><td style="white-space:nowrap">'+fmt(w.d)+' - '+fmt(w.d+6)+'</td><td class="num">'+pp(P.pc[i])+'</td><td class="num">'+(i<=P.cur?pp(P.ac[i]):'')+'</td>'
+     +'<td><input id="tgw-'+i+'" type="number" min="0" max="100" step="any" style="width:90px" data-tga="'+i+'" value="'+(S.a[i]!=null?S.a[i]:'')+'" placeholder="'+(v!=null?pp(v):'')+'"></td>'
+     +'<td class="num" id="tgd-'+i+'">'+(v!=null?pp(v-P.pc[i]):'')+'</td><td id="tgs-'+i+'">'+tgStatus(i)+'</td><td><button data-tgw="'+i+'">'+(i===tgSel?'Dipilih':'Lihat list')+'</button></td></tr>'}
+  return h+'</tbody></table></div></div>';
+}
+function tgRows(sol){const t=tgQ.toLowerCase().split(/\s+/).filter(Boolean);
+  return P.its.map(it=>{const f=sol.floors.get(it)||0,v=sol.map.get(it)||0;return {it,f,v,d:v-f,c:it.w*(v-f)/P.tot}})
+    .filter(r=>(tgAll||r.d>0.005)&&(!tgBill||r.it.b===tgBill)&&(!tgArea||(r.it.a||'(tanpa area)')===tgArea)&&t.every(s=>(r.it.c+' '+r.it.d+' '+r.it.s+' '+r.it.u+' '+r.it.a).toLowerCase().includes(s)))}
+function tgList(){
+  const sw=pgWk(tgSel),S=tgScope(),o=S.o[tgSel]||{},bills=[...new Set(P.its.map(i=>i.b))],areas=[...new Set(P.its.map(i=>i.a||'(tanpa area)'))].sort();
+  const sel=(id,cur,arr,all)=>'<select id="'+id+'"><option value="">'+all+'</option>'+arr.map(v=>'<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join('')+'</select>';
+  let h='<div class="panel"><div class="panel-h"><h2>List target '+wl(sw.n)+' · '+fmt(sw.d)+' s/d '+fmt(sw.d+6)+'</h2></div>';
+  if(!TGS||TGS.T==null)return h+'<div class="empty">Isi target pada tabel di atas untuk membuat list item.</div></div>';
+  const rows=tgRows(TGS),sum=rows.reduce((a,r)=>a+r.c,0);
+  h+='<p class="note">Target '+pp(TGS.T)+'%. Item dipilih mengikuti urutan rencana: pekerjaan yang jadwalnya lebih awal didahulukan, dan progres yang sudah dicapai tidak pernah turun. Kolom Target bisa diubah; item lain menyesuaikan.</p>'
+   +'<div class="btnrow"><label>Cari item<input id="tg-q" value="'+esc(tgQ)+'" placeholder="uraian, kode, area"></label><label>Bill'+sel('tg-bill',tgBill,bills,'Semua bill')+'</label><label>Area'+sel('tg-area',tgArea,areas,'Semua area')+'</label>'
+   +'<label style="flex-direction:row;align-items:center;gap:6px;min-width:0"><input type="checkbox" id="tg-all"'+(tgAll?' checked':'')+'> Tampilkan item tanpa kenaikan</label></div>'
+   +'<div class="btnrow"><span class="note">'+rows.length+' item, kontribusi <b id="tg-sumc">'+pp(sum)+'%</b>.</span><span class="spacer"></span><label>Isi PDF<select id="tg-ps"><option value="sel"'+(tgPS==='sel'?' selected':'')+'>Minggu ini saja ('+wl(sw.n)+')</option><option value="all"'+(tgPS==='all'?' selected':'')+'>Semua minggu target</option></select></label><button class="primary" id="tg-print">Export PDF</button></div>';
+  if(!rows.length)return h+'<div class="empty">Tidak ada item yang perlu naik untuk target ini.</div></div>';
+  h+='<div class="scroll" style="max-height:560px;overflow-y:auto"><table><thead><tr><th>Item</th><th>Uraian</th><th>Area</th><th class="num">Bobot</th><th class="num">Posisi awal</th><th class="num">Rencana</th><th>Target %</th><th class="num">Naik</th><th class="num">Kontribusi</th></tr></thead><tbody>';
+  let lb=null,ls=null;
+  for(const r of rows.slice(0,400)){const it=r.it;
+    if(it.b!==lb){h+='<tr><td colspan="9" class="grp">'+esc(it.b)+'</td></tr>';lb=it.b;ls=null}
+    if(it.s!==ls&&it.s){h+='<tr><td colspan="9" style="font-weight:600">'+esc(it.s)+'</td></tr>';ls=it.s}
+    h+='<tr><td>'+esc(it.c)+'</td><td>'+esc(it.d)+(it.u?'<br><small style="color:var(--muted)">'+esc(it.u)+'</small>':'')+'</td><td><small>'+esc(it.a)+'</small></td><td class="num">'+pp(it.w)+'</td><td class="num">'+pp(r.f)+'%</td><td class="num">'+pp(tgAt(it,tgSel))+'%</td>'
+     +'<td><input id="tgi-'+it.k+'" type="number" min="0" max="100" step="any" style="width:84px" data-tgo="'+it.k+'" value="'+(o[it.k]!=null?o[it.k]:'')+'" placeholder="'+pp(r.v)+'"></td><td class="num" id="tgn-'+it.k+'">'+pp(r.d)+'</td><td class="num" id="tgc-'+it.k+'">'+pp(r.c)+'</td></tr>'}
+  return h+'</tbody></table></div>'+(rows.length>400?'<p class="note">Layar menampilkan 400 item pertama. PDF memuat semua '+rows.length+' item.</p>':'')+'</div>';
+}
+function tgPrintWeek(w,sol){const sw=pgWk(w),rows=tgRows(sol);
+  let h='<h3 style="break-before:page">List target '+wl(sw.n)+' · '+fmt(sw.d)+' s/d '+fmt(sw.d+6)+' · target '+pp(sol.T)+'% · '+rows.length+' item</h3>';
+  if(!rows.length)return h+'<p class="note">Tidak ada item yang perlu naik.</p>';
+  h+='<table><thead><tr><th>Item</th><th>Uraian</th><th>Area</th><th class="num">Bobot</th><th class="num">Posisi awal</th><th class="num">Target</th><th class="num">Naik</th><th class="num">Kontribusi</th></tr></thead><tbody>';
+  let lb=null,ls=null;
+  for(const r of rows){const it=r.it;
+    if(it.b!==lb){h+='<tr><td colspan="8" style="font-weight:600">'+esc(it.b)+'</td></tr>';lb=it.b;ls=null}
+    if(it.s!==ls&&it.s){h+='<tr><td colspan="8"><i>'+esc(it.s)+'</i></td></tr>';ls=it.s}
+    h+='<tr><td>'+esc(it.c)+'</td><td>'+esc(it.d)+'</td><td>'+esc(it.a)+'</td><td class="num">'+pp(it.w)+'</td><td class="num">'+pp(r.f)+'%</td><td class="num">'+pp(r.v)+'%</td><td class="num">'+pp(r.d)+'</td><td class="num">'+pp(r.c)+'</td></tr>'}
+  return h+'</tbody></table>';
+}
+function tgPrint(){if(tgPS==='all'){const A=tgAnch().filter(w=>w>P.cur);if(A.length)return A.map(w=>tgPrintWeek(w,tgSolve(w))).join('')}
+  return TGS&&TGS.T!=null?tgPrintWeek(tgSel,TGS):''}
+function tgPickWeek(){if(tgSel==null||tgSel>=PG.weeks.length){const nx=tgAnch().find(w=>w>P.cur);tgSel=nx!=null?nx:Math.min(P.cur+1,PG.weeks.length-1)}}
+function vTg(){
+  if(!PG)return '<div class="panel">'+(pgMsg?'<div class="alert '+pgMsg.lv+'">'+esc(pgMsg.txt)+'</div>':'')+'<h2>Belum ada data Progress Control</h2><p class="note">Halaman Target memakai bobot dan rencana dari file Progress Control.</p><div class="btnrow"><button class="primary" id="pg-up">Unggah Progress Control (.xlsx)</button></div></div>';
+  if(pgW==null)pgW=pgCur();pgW=Math.min(Math.max(pgW,0),PG.weeks.length-1);pgCompute();tgBuildEnt();tgPickWeek();TGS=tgSolve(tgSel);
+  let opt='';for(let i=0;i<PG.weeks.length;i++){const w=pgWk(i);opt+='<option value="'+i+'"'+(i===pgW?' selected':'')+'>'+wl(w.n)+' · '+fmt(w.d)+(i===pgCur()?' (minggu ini)':'')+'</option>'}
+  return '<div class="panel no-print"><div class="btnrow"><label>Aktual sampai minggu<select id="pg-w">'+opt+'</select></label><p class="note" style="flex:1;min-width:220px">Target disimpan terpisah untuk Semua, CSA, dan MEP sesuai filter disiplin di atas.</p></div></div>'
+   +'<div class="panel" style="margin-top:18px" id="tg-sum">'+tgSum()+'</div><div id="tg-weeks" class="no-print" style="margin-top:18px">'+tgWeeks()+'</div><div id="tg-list" class="no-print" style="margin-top:18px">'+tgList()+'</div><div id="tg-print" class="print-only"></div>';
+}
+function tgRefreshWeeks(){TGS=tgSolve(tgSel);$('tg-sum').innerHTML=tgSum();const S=tgScope();
+  for(let i=0;i<PG.weeks.length;i++){const v=tgCurve(i),a=$('tgw-'+i),d=$('tgd-'+i),s=$('tgs-'+i);if(a)a.placeholder=v!=null?pp(v):'';if(d)d.textContent=v!=null?pp(v-P.pc[i]):'';if(s)s.innerHTML=tgStatus(i)}
+  $('tg-list').innerHTML=tgList()}
+function tgRefreshItems(){TGS=tgSolve(tgSel);$('tg-sum').innerHTML=tgSum();let sum=0;
+  for(const r of tgRows(TGS)){sum+=r.c;const k=r.it.k,a=$('tgi-'+k),n=$('tgn-'+k),c=$('tgc-'+k);if(a)a.placeholder=pp(r.v);if(n)n.textContent=pp(r.d);if(c)c.textContent=pp(r.c)}
+  const e=$('tg-sumc');if(e)e.textContent=pp(sum)+'%'}
 function vSet(){
   let h='';
   if(msg)h+='<div class="alert '+msg.lv+'" style="margin-bottom:14px">'+esc(msg.txt)+'</div>';
@@ -771,15 +901,15 @@ function render(){
   compute(); selW=Math.min(Math.max(selW,1),C.maxW);
   const dc=$('d-cand'),wasOpen=dc&&dc.open;
   $('v-dash').innerHTML=view==='dash'?vDash():''; $('v-week').innerHTML=view==='week'?vWeek():'';
-  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():''; $('v-la').innerHTML=view==='la'?vLa():''; $('v-pg').innerHTML=view==='pg'?vPg():''; $('v-cari').innerHTML=view==='cari'?vCari():'';
+  $('v-ind').innerHTML=view==='ind'?vInd():''; $('v-set').innerHTML=view==='set'?vSet():''; $('v-rep').innerHTML=view==='rep'?vRep():''; $('v-la').innerHTML=view==='la'?vLa():''; $('v-pg').innerHTML=view==='pg'?vPg():''; $('v-tg').innerHTML=view==='tg'?vTg():''; $('v-cari').innerHTML=view==='cari'?vCari():'';
   if(wasOpen&&$('d-cand'))$('d-cand').open=true;
-  for(const v of ['dash','week','la','pg','ind','rep','set','cari']){$('v-'+v).hidden=view!==v;const tb=$('tab-'+v);if(tb)tb.setAttribute('aria-selected',view===v)}
+  for(const v of ['dash','week','la','pg','tg','ind','rep','set','cari']){$('v-'+v).hidden=view!==v;const tb=$('tab-'+v);if(tb)tb.setAttribute('aria-selected',view===v)}
   if(jump){const r=$('row-'+jump);if(r&&r.scrollIntoView){r.scrollIntoView({block:'center'});r.classList.add('flash')}jump=null}
   const n=indList().filter(i=>i.al.lv).length,b=$('ind-n');b.hidden=!n;b.textContent=n;
   $('h-title').textContent=cfg.project||'Kontrol Mingguan';
   sub();
   document.title=cfg.project?cfg.project+' · Kontrol Mingguan':'Kontrol Mingguan';
-  const dsrc=view==='pg'&&PG?PG.items.map(i=>i.x):T.map(t=>t.disc),dl=['CSA','MEP'].filter(d=>dsrc.includes(d));
+  const dsrc=(view==='pg'||view==='tg')&&PG?PG.items.map(i=>i.x):T.map(t=>t.disc),dl=['CSA','MEP'].filter(d=>dsrc.includes(d));
   const show=dl.length>0&&view!=='set'; $('discbar').hidden=!show;
   if(show){const c={};for(const x of dsrc)c[x]=(c[x]||0)+1;
     $('discchips').innerHTML='<span class="lab">Disiplin</span><button class="chip" data-disc="" aria-pressed="'+(!discF)+'">Semua ('+dsrc.length+')</button>'+dl.map(d=>'<button class="chip" data-disc="'+esc(d)+'" aria-pressed="'+(discF===d)+'">'+esc(d)+' ('+c[d]+')</button>').join('')}
@@ -787,6 +917,7 @@ function render(){
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
   if(d.view){view=d.view;confirmClose=confirmReset=false;render();return}
+  if(d.tgw!=null){tgSel=+d.tgw;render();return}
   if(d.goto){selW=+d.gw;areaF='';view='week';jump=d.goto;render();return}
   if('disc' in d){discF=d.disc;areaF='';render();return}
   if('area' in d){areaF=d.area;render();return}
@@ -804,6 +935,9 @@ document.addEventListener('click',e=>{
     case 's-sync':pull(true);return;
     case 'r-print':case 'la-print':case 'pg-print':window.print();return;
     case 'pg-up':$('f-xlsx').click();return;
+    case 'tg-print':$('tg-print').innerHTML=tgPrint();window.print();return;
+    case 'tg-clear':tgClear=true;break;case 'tg-clear-no':tgClear=false;break;
+    case 'tg-clear-yes':tg[discF||'all']={a:{},o:{}};tgClear=false;saveState();break;
     case 'pg-bulk':{const v=num(($('pg-bulkv')||{}).value);if(v==null)return;pgBulk=Math.max(0,Math.min(100,v));break}
     case 'pg-bulk-no':pgBulk=null;break;
     case 'pg-bulk-yes':{const m=pa[pgW]||(pa[pgW]={});for(const it of pgList())m[it.k]=pgBulk;pgBulk=null;saveState();break}
@@ -811,7 +945,7 @@ document.addEventListener('click',e=>{
     case 's-csv':$('f-csv').click();return;
     case 's-import':$('f-json').click();return;
     case 's-sample':setData(sampleRows(),'data contoh');msg={lv:'warn',txt:'Data contoh dimuat. Ini bukan jadwal Anda; ganti dengan Google Sheet atau CSV sendiri.'};view=view==='set'?'set':'dash';break;
-    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent,vols,reals,pa,pf},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
+    case 's-export':{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({cfg:{project:cfg.project,client:cfg.client,lead:cfg.lead},marks,indent,vols,reals,pa,pf,tg},null,1)],{type:'application/json'}));a.download='kontrol-mingguan-tandaan.json';a.click();return}
     case 's-reset':confirmReset=true;break;case 's-reset-no':confirmReset=false;break;
     case 's-reset-yes':confirmReset=false;marks={};indent={};reals={};saveState();msg={lv:'ok',txt:'Semua tandaan dan barang indent dihapus.'};break;
     default:return;
@@ -822,6 +956,13 @@ document.addEventListener('change',e=>{
   const el=e.target;
   if(el.id==='w-sel'){selW=+el.value;confirmClose=false;render();return}
   if(el.id==='f-xlsx'&&el.files[0]){const f=el.files[0];el.value='';pgLoadFile(f);return}
+  if(el.dataset.tga!=null){const w=+el.dataset.tga,v=num(el.value),S=tgScope();if(v==null)delete S.a[w];else S.a[w]=Math.max(0,Math.min(100,v));saveState();tgRefreshWeeks();return}
+  if(el.dataset.tgo!=null){const k=el.dataset.tgo,v=num(el.value),S=tgScope(),o=S.o[tgSel]||(S.o[tgSel]={});if(v==null)delete o[k];else o[k]=Math.max(0,Math.min(100,v));saveState();tgRefreshItems();return}
+  if(el.id==='tg-q'){tgQ=el.value;render();return}
+  if(el.id==='tg-bill'){tgBill=el.value;render();return}
+  if(el.id==='tg-area'){tgArea=el.value;render();return}
+  if(el.id==='tg-all'){tgAll=el.checked;render();return}
+  if(el.id==='tg-ps'){tgPS=el.value;return}
   if(el.id==='pg-w'){pgW=+el.value;pgBulk=null;render();return}
   if(el.id==='pg-catch'){cfg.pgCatch=+el.value;sv(K.cfg,cfg);render();return}
   if(el.id==='pg-q'){pgQ=el.value;render();return}
@@ -835,7 +976,7 @@ document.addEventListener('change',e=>{
   if(el.id==='r-from'){repFrom=+el.value;if(repTo<repFrom)repTo=repFrom;render();return}
   if(el.id==='r-to'){repTo=+el.value;if(repTo<repFrom)repFrom=repTo;render();return}
   if(el.id==='f-csv'&&el.files[0]){const f=el.files[0];readFile(f,t=>{try{const r=rowsFromCSV(t);setData(r.rows,'file '+f.name);msg={lv:'ok',txt:r.rows.length+' pekerjaan dimuat dari '+f.name+(r.skip?', '+r.skip+' baris dilewati':'')+'.'}}catch(x){msg={lv:'crit',txt:x.message}}el.value='';render()});return}
-  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};pa=o.pa||{};pf=o.pf||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
+  if(el.id==='f-json'&&el.files[0]){readFile(el.files[0],t=>{try{const o=JSON.parse(t);if(typeof o.marks!=='object'||typeof o.indent!=='object')throw 0;marks=o.marks||{};indent=o.indent||{};vols=o.vols||{};reals=o.reals||{};pa=o.pa||{};pf=o.pf||{};tg=o.tg||{};saveState();msg={lv:'ok',txt:'Tandaan berhasil diimpor.'}}catch(x){msg={lv:'crit',txt:'File bukan cadangan tandaan yang valid.'}}el.value='';render()});return}
   if(el.dataset.cfg){const k=el.dataset.cfg;cfg[k]=k==='lead'?Math.max(0,Math.min(80,Math.round(+el.value||0))):el.value.trim();sv(K.cfg,cfg);if(k==='w1'){build();selW=CUR}render();return}
   if(el.dataset.real!=null){const k=el.dataset.real,v=num(el.value),r=reals[selW]||(reals[selW]={});
     if(v==null)delete r[k];else{r[k]=Math.max(0,v);if(marks[selW])delete marks[selW][k]}saveState();render();return}
@@ -851,7 +992,7 @@ document.addEventListener('change',e=>{
 document.addEventListener('input',e=>{if(e.target.id!=='q')return;q=e.target.value;
   if(q.trim()){if(view!=='cari')prevView=view;view='cari'}else if(view==='cari')view=prevView;render()});
 document.addEventListener('keydown',e=>{if(e.target.id==='q'&&e.key==='Escape'&&q){q='';e.target.value='';view=prevView;render()}});
-cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};reals=s.reals||{};pa=s.pa||{};pf=s.pf||{};stTs=s.ts||0}
+cfg={...cfg,...ld(K.cfg,{})}; {const d=ld(K.data,null);if(d&&Array.isArray(d.rows)){rows=d.rows;src=d.src||''}} {const s=ld(K.st,{});marks=s.marks||{};indent=s.indent||{};vols=s.vols||{};reals=s.reals||{};pa=s.pa||{};pf=s.pf||{};tg=s.tg||{};stTs=s.ts||0}
 PG=ld(KP,null); build(); selW=CUR; if(!T.length&&!PG)view='set'; render(); if(cfg.sync)pull();
 </script>
 </body>
