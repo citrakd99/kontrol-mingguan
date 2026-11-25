@@ -103,6 +103,7 @@ code{background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px
 @media (prefers-reduced-motion:no-preference){.row.flash{transition:background 2s}}
 .print-only{display:none}
 th.plan-c,td.plan-c{background:var(--ok-soft)!important}
+.en{font-weight:400;opacity:.75}
 .up{color:var(--ok);font-weight:600;white-space:nowrap}
 h3{font-family:var(--display);font-size:14px;font-weight:600;margin:14px 0 0}
 .btnrow label{min-width:200px}
@@ -260,7 +261,7 @@ function sampleRows(){
 
 /* ---------- state ---------- */
 const K={cfg:'wc-cfg',data:'wc-data',st:'wc-state'};
-let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:'',laN:3,laPrep:2,laMode:'mulai',pgCatch:2}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
+let cfg={project:'',client:'',sheet:'',lead:8,w1:'',sync:'',laN:3,laPrep:2,laMode:'mulai',pgCatch:2,pdfLang:'both'}, rows=[], src='', marks={}, indent={}, vols={}, reals={}, HASB=false;
 let T=[], TB={}, W1=0, BASEW=1, CUR=1, AREAS=[], DISCS=[];
 let repFrom=0, repTo=0, laFrom=0, q='', prevView='dash', jump=null;
 let view='dash', selW=1, areaF='', discF='', confirmClose=false, confirmReset=false, msg=null, busy=false, C=null;
@@ -568,7 +569,7 @@ function laTable(list,showStart){
 /* ---------- Progress bobot biaya: plan, actual, forecast ---------- */
 const KP='wc-prog', XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 let PG=null, pa={}, pf={}, pgW=null, pgQ='', pgBill='', pgArea='', pgOnly=true, pgMsg=null, pgBulk=null, P=null;
-const pp=v=>(Math.round(v*100)/100).toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pp=v=>(Math.round(v*100)/100).toLocaleString(typeof NL==='string'?NL:'id-ID',{minimumFractionDigits:2,maximumFractionDigits:2});
 function loadXlsxLib(){return window.XLSX?Promise.resolve(window.XLSX):new Promise((ok,no)=>{const s=document.createElement('script');s.src=XLSX_URL;
   s.onload=()=>ok(window.XLSX);s.onerror=()=>no(new Error('Pembaca Excel gagal dimuat. Periksa koneksi internet lalu coba lagi.'));document.head.appendChild(s)})}
 function cellDn(v){
@@ -604,7 +605,9 @@ function parsePG(g){
   for(let k=1;k<weeks.length;k++)if(weeks[k].n==null&&weeks[k-1].n!=null)weeks[k].n=weeks[k-1].n+1;
   for(let k=weeks.length-2;k>=0;k--)if(weeks[k].n==null&&weeks[k+1].n!=null)weeks[k].n=weeks[k+1].n-1;
   weeks.forEach((w,k)=>{if(w.n==null)w.n=k});
+  if(weeks.some((w,k)=>k&&w.n<=weeks[k-1].n))weeks.forEach((w,k)=>{w.n=weeks[0].n+k}); /* nomor minggu ganda di file: urutkan ulang dari tanggal */
   let lm='';if(mr!=null)wc.forEach((j,k)=>{const v=g[mr][j];if(typeof v==='string'&&v.trim())lm=v.trim();weeks[k].m=lm});
+  weeks.forEach(w=>{if(!w.m&&w.d!=null){const x=n2d(w.d);w.m=['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'][x.getUTCMonth()]+' - '+x.getUTCFullYear()}});
   const items=[];let bill='',sec='',sub='';
   for(let i=dr+1;i<g.length;i++){const r=g[i]||[];const desc=String(r[col.desc]==null?'':r[col.desc]).trim();
     if(low(desc)==='total')break;
@@ -804,17 +807,22 @@ function tgWarn(){const S=tgScope(),A=tgAnch(),out=[];let prev=null;
   return out}
 function tgStatus(i){const S=tgScope();if(S.a[i]==null)return '';if(i>P.cur)return '<span class="pill acc">Target</span>';
   return P.ac[i]>=S.a[i]-0.005?'<span class="pill ok">Tercapai</span>':'<span class="pill crit">Kurang '+pp(S.a[i]-P.ac[i])+'%</span>'}
+let LG='id', NL='id-ID';
+const tr=(id,en)=>LG==='en'?en:LG==='both'&&id!==en?id+' / '+en:id;
+const th2=(id,en)=>LG==='en'?en:LG==='both'&&id!==en?id+'<br><span class="en">'+en+'</span>':id;
+const MEN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtL=n=>{if(LG!=='en')return fmt(n);const d=n2d(n);return String(d.getUTCDate()).padStart(2,'0')+' '+MEN[d.getUTCMonth()]+" '"+String(d.getUTCFullYear()).slice(2)};
 function tgSum(){
   const cur=P.cur,wk=pgWk(cur),S=tgScope(),A=tgAnch(),nx=A.find(w=>w>cur),sw=pgWk(tgSel),need=nx!=null?S.a[nx]-P.ac[cur]:null;
-  let h='<div><h2 style="font-size:20px">Target Progress'+(cfg.project?' · '+esc(cfg.project):'')+'</h2><p class="note">'+(cfg.client?'Client: '+esc(cfg.client)+' · ':'')+'Aktual s/d '+wl(wk.n)+' · Disiplin: '+(discF?esc(discF):'Semua')+' · Dicetak '+fmt(TODAY)+'</p></div>';
-  h+='<div class="kpis"><div class="kpi"><div class="l">Aktual kumulatif</div><div class="v" style="color:var(--ok)">'+pp(P.ac[cur])+'%</div><div class="s">rencana '+pp(P.pc[cur])+'%</div></div>'
-   +'<div class="kpi"><div class="l">Target berikutnya</div><div class="v">'+(nx!=null?pp(S.a[nx])+'%':'-')+'</div><div class="s">'+(nx!=null?wl(pgWk(nx).n)+' · '+fmt(pgWk(nx).d+6):'belum ada target')+'</div></div>'
-   +'<div class="kpi"><div class="l">Harus dikejar</div><div class="v">'+(need!=null?pp(Math.max(0,need))+'%':'-')+'</div><div class="s">'+(need!=null?pp(Math.max(0,need)/(nx-cur))+'% per minggu':'isi target di tabel')+'</div></div>'
-   +'<div class="kpi"><div class="l">Target '+wl(sw.n)+'</div><div class="v">'+(TGS&&TGS.T!=null?pp(TGS.T)+'%':'-')+'</div><div class="s">rencana '+pp(P.pc[tgSel])+'%</div></div></div>';
-  const wr=tgWarn();if(wr.length)h+='<div class="alerts" style="margin-top:12px">'+wr.map(x=>'<div class="alert warn">'+esc(x)+'</div>').join('')+'</div>';
-  h+='<h3>Kurva target</h3><div class="legend"><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>Rencana</span><span><i style="background:var(--ok);height:3px;vertical-align:3px"></i>Aktual</span><span><i style="background:var(--warn);height:2px;vertical-align:3px"></i>Forecast manual</span><span><i style="background:var(--warn);border-radius:50%"></i>Titik target</span><span><i style="background:var(--accent-soft)"></i>Minggu dipilih</span></div><div class="scroll">'+tgChart()+'</div>';
-  if(A.length)h+='<div class="print-only"><h3>Daftar target</h3><table><thead><tr><th>Minggu</th><th>Sampai</th><th class="num">Rencana kum.</th><th class="num">Target kum.</th><th class="num">Selisih thd rencana</th><th class="num">Aktual kum.</th></tr></thead><tbody>'
-    +A.map(w=>'<tr><td>'+wl(pgWk(w).n)+'</td><td>'+fmt(pgWk(w).d+6)+'</td><td class="num">'+pp(P.pc[w])+'</td><td class="num">'+pp(S.a[w])+'</td><td class="num">'+pp(S.a[w]-P.pc[w])+'</td><td class="num">'+(w<=cur?pp(P.ac[w]):'')+'</td></tr>').join('')+'</tbody></table></div>';
+  let h='<div><h2 style="font-size:20px">'+tr('Target Progress','Progress Target')+(cfg.project?' · '+esc(cfg.project):'')+'</h2><p class="note">'+(cfg.client?'Client: '+esc(cfg.client)+' · ':'')+tr('Aktual s/d','Actual up to')+' '+wl(wk.n)+' · '+tr('Disiplin','Discipline')+': '+(discF?esc(discF):tr('Semua','All'))+' · '+tr('Dicetak','Printed')+' '+fmtL(TODAY)+'</p></div>';
+  h+='<div class="kpis"><div class="kpi"><div class="l">'+tr('Aktual kumulatif','Cumulative actual')+'</div><div class="v" style="color:var(--ok)">'+pp(P.ac[cur])+'%</div><div class="s">'+tr('rencana','plan')+' '+pp(P.pc[cur])+'%</div></div>'
+   +'<div class="kpi"><div class="l">'+tr('Target berikutnya','Next target')+'</div><div class="v">'+(nx!=null?pp(S.a[nx])+'%':'-')+'</div><div class="s">'+(nx!=null?wl(pgWk(nx).n)+' · '+fmtL(pgWk(nx).d+6):tr('belum ada target','no target yet'))+'</div></div>'
+   +'<div class="kpi"><div class="l">'+tr('Harus dikejar','To catch up')+'</div><div class="v">'+(need!=null?pp(Math.max(0,need))+'%':'-')+'</div><div class="s">'+(need!=null?pp(Math.max(0,need)/(nx-cur))+'% '+tr('per minggu','per week'):tr('isi target di tabel','enter targets in the table'))+'</div></div>'
+   +'<div class="kpi"><div class="l">Target '+wl(sw.n)+'</div><div class="v">'+(TGS&&TGS.T!=null?pp(TGS.T)+'%':'-')+'</div><div class="s">'+tr('rencana','plan')+' '+pp(P.pc[tgSel])+'%</div></div></div>';
+  const wr=tgWarn();if(wr.length)h+='<div class="alerts no-print" style="margin-top:12px">'+wr.map(x=>'<div class="alert warn">'+esc(x)+'</div>').join('')+'</div>';
+  h+='<h3>'+tr('Kurva target','Target curve')+'</h3><div class="legend"><span><i style="background:var(--fg);height:2px;vertical-align:3px"></i>'+tr('Rencana','Plan')+'</span><span><i style="background:var(--ok);height:3px;vertical-align:3px"></i>'+tr('Aktual','Actual')+'</span><span><i style="background:var(--warn);height:2px;vertical-align:3px"></i>'+tr('Forecast manual','Manual forecast')+'</span><span><i style="background:var(--warn);border-radius:50%"></i>'+tr('Titik target','Target point')+'</span><span><i style="background:var(--accent-soft)"></i>'+tr('Minggu dipilih','Selected week')+'</span></div><div class="scroll">'+tgChart()+'</div>';
+  if(A.length)h+='<div class="print-only"><h3>'+tr('Daftar target','Target list')+'</h3><table><thead><tr><th>'+th2('Minggu','Week')+'</th><th>'+th2('Sampai','Until')+'</th><th class="num">'+th2('Rencana kum.','Cum. plan')+'</th><th class="num">'+th2('Target kum.','Cum. target')+'</th><th class="num">'+th2('Selisih thd rencana','Variance to plan')+'</th><th class="num">'+th2('Aktual kum.','Cum. actual')+'</th></tr></thead><tbody>'
+    +A.map(w=>'<tr><td>'+wl(pgWk(w).n)+'</td><td>'+fmtL(pgWk(w).d+6)+'</td><td class="num">'+pp(P.pc[w])+'</td><td class="num">'+pp(S.a[w])+'</td><td class="num">'+sg(S.a[w]-P.pc[w])+'</td><td class="num">'+(w<=cur?pp(P.ac[w]):'')+'</td></tr>').join('')+'</tbody></table></div>';
   return h;
 }
 function tgWeeks(){
@@ -840,7 +848,7 @@ function tgList(){
   h+='<p class="note">Target '+pp(TGS.T)+'%. Item dipilih mengikuti urutan rencana: pekerjaan yang jadwalnya lebih awal didahulukan, dan progres yang sudah dicapai tidak pernah turun. Kolom Target bisa diubah; item lain menyesuaikan.</p>'
    +'<div class="btnrow"><label>Cari item<input id="tg-q" value="'+esc(tgQ)+'" placeholder="uraian, kode, area"></label><label>Bill'+sel('tg-bill',tgBill,bills,'Semua bill')+'</label><label>Area'+sel('tg-area',tgArea,areas,'Semua area')+'</label>'
    +'<label style="flex-direction:row;align-items:center;gap:6px;min-width:0"><input type="checkbox" id="tg-all"'+(tgAll?' checked':'')+'> Tampilkan item tanpa kenaikan</label></div>'
-   +'<div class="btnrow"><span class="note">'+rows.length+' item, kontribusi <b id="tg-sumc">'+pp(sum)+'%</b>.</span><span class="spacer"></span><label>Isi PDF<select id="tg-ps"><option value="sel"'+(tgPS==='sel'?' selected':'')+'>Minggu ini saja ('+wl(sw.n)+')</option><option value="all"'+(tgPS==='all'?' selected':'')+'>Semua minggu target</option></select></label><label>Item di PDF<select id="tg-pi"><option value="target"'+(tgPI==='target'?' selected':'')+'>Semua item plan/target</option><option value="naik"'+(tgPI==='naik'?' selected':'')+'>Hanya item yang naik</option><option value="filter"'+(tgPI==='filter'?' selected':'')+'>Sesuai filter layar</option></select></label><button class="primary" id="tg-print">Export PDF</button></div>';
+   +'<div class="btnrow"><span class="note">'+rows.length+' item, kontribusi <b id="tg-sumc">'+pp(sum)+'%</b>.</span><span class="spacer"></span><label>Isi PDF<select id="tg-ps"><option value="sel"'+(tgPS==='sel'?' selected':'')+'>Minggu ini saja ('+wl(sw.n)+')</option><option value="all"'+(tgPS==='all'?' selected':'')+'>Semua minggu target</option></select></label><label>Item di PDF<select id="tg-pi"><option value="target"'+(tgPI==='target'?' selected':'')+'>Semua item plan/target</option><option value="naik"'+(tgPI==='naik'?' selected':'')+'>Hanya item yang naik</option><option value="filter"'+(tgPI==='filter'?' selected':'')+'>Sesuai filter layar</option></select></label><label>Bahasa PDF<select id="tg-lang"><option value="both"'+(cfg.pdfLang==='both'?' selected':'')+'>Indonesia + English</option><option value="id"'+(cfg.pdfLang==='id'?' selected':'')+'>Indonesia</option><option value="en"'+(cfg.pdfLang==='en'?' selected':'')+'>English</option></select></label><button class="primary" id="tg-print">Export PDF</button></div>';
   if(!rows.length)return h+'<div class="empty">Tidak ada item yang perlu naik untuk target ini.</div></div>';
   h+='<div class="scroll" style="max-height:560px;overflow-y:auto"><table><thead><tr><th>Item</th><th>Uraian</th><th>Area</th><th class="num">Bobot</th><th class="num">Posisi awal</th><th class="num plan-c">Plan</th><th>Target %</th><th class="num">Selisih</th><th class="num">Naik</th><th class="num">Kontribusi</th></tr></thead><tbody>';
   let lb=null,ls=null;
@@ -852,7 +860,7 @@ function tgList(){
   return h+'</tbody></table></div>'+(rows.length>400?'<p class="note">Layar menampilkan 400 item pertama. PDF memuat semua '+rows.length+' item.</p>':'')+'</div>';
 }
 const nk=v=>v>0.005?'<span class="up">&#9650; '+pp(v)+'</span>':pp(0);
-const pp3=v=>(Math.round(v*1000)/1000).toLocaleString('id-ID',{minimumFractionDigits:3,maximumFractionDigits:3});
+const pp3=v=>(Math.round(v*1000)/1000).toLocaleString(NL,{minimumFractionDigits:3,maximumFractionDigits:3});
 const sg=(v,f)=>{const x=Math.abs(v)<0.0005?0:v,s=(x>0?'+':'')+(f||pp)(x);return x<0?'<span style="color:var(--crit)">'+s+'</span>':s};
 function tgPrintRows(w,sol){
   const t=tgQ.toLowerCase().split(/\s+/).filter(Boolean);
@@ -860,18 +868,21 @@ function tgPrintRows(w,sol){
     .filter(r=>tgPI==='naik'?r.v-r.f>0.005:tgPI==='filter'?((tgAll||r.v-r.f>0.005)&&(!tgBill||r.it.b===tgBill)&&(!tgArea||(r.it.a||'(tanpa area)')===tgArea)&&t.every(s=>(r.it.c+' '+r.it.d+' '+r.it.s+' '+r.it.u+' '+r.it.a).toLowerCase().includes(s))):(r.v>0.005||r.pl>0.005));
 }
 function tgPrintWeek(w,sol){
-  const sw=pgWk(w),rows=tgPrintRows(w,sol),sum=a=>a.reduce((o,r)=>({wp:o.wp+r.wp,wt:o.wt+r.wt}),{wp:0,wt:0}),all=sum(rows);
-  const lab={target:'semua item yang punya plan atau target',naik:'hanya item yang naik',filter:'sesuai filter layar'}[tgPI];
-  let h='<h3 style="break-before:page">Target '+wl(sw.n)+' · '+fmt(sw.d)+' s/d '+fmt(sw.d+6)+'</h3><p class="note">Plan kumulatif '+pp(P.pc[w])+'% · Target '+pp(sol.T)+'% · Selisih '+sg(sol.T-P.pc[w])+'% · '+rows.length+' item ('+lab+')</p>';
-  if(!rows.length)return h+'<p class="note">Tidak ada item.</p>';
-  h+='<table class="tgp"><thead><tr><th>Item</th><th>Uraian</th><th>Area</th><th class="num">Bobot</th><th class="num">Posisi awal %</th><th class="num plan-c">Plan %</th><th class="num">Target %</th><th class="num">Naik</th><th class="num">Selisih %</th><th class="num plan-c">Plan thd total</th><th class="num">Target thd total</th><th class="num">Selisih thd total</th></tr></thead><tbody>';
-  const tot={};for(const r of rows){const o=tot[r.it.b]||(tot[r.it.b]={wp:0,wt:0});o.wp+=r.wp;o.wt+=r.wt}
+  const sw=pgWk(w),rows=tgPrintRows(w,sol);
+  const agg=list=>{let W=0,f=0,pl=0,v=0;for(const it of list){W+=it.w;f+=it.w*(sol.floors.get(it)||0);pl+=it.w*tgAt(it,w);v+=it.w*(sol.map.get(it)||0)}return {W,f,pl,v}};
+  const cells=(o,d)=>'<td class="num">'+pp3(o.W)+'</td><td class="num">'+pp(o.f/d)+'</td><td class="num plan-c">'+pp(o.pl/d)+'</td><td class="num">'+pp(o.v/d)+'</td><td class="num">'+nk((o.v-o.f)/d)+'</td><td class="num">'+sg((o.v-o.pl)/d)+'</td>';
+  const lab={target:tr('semua item yang punya plan atau target','all items with plan or target'),naik:tr('hanya item yang naik','increasing items only'),filter:tr('sesuai filter layar','as filtered on screen')}[tgPI];
+  let h='<h3 style="break-before:page">Target '+wl(sw.n)+' · '+fmtL(sw.d)+' – '+fmtL(sw.d+6)+'</h3><p class="note">'+tr('Plan kumulatif','Cumulative plan')+' '+pp(P.pc[w])+'% · Target '+pp(sol.T)+'% · '+tr('Selisih','Variance')+' '+sg(sol.T-P.pc[w])+'% · '+rows.length+' '+tr('item','items')+' ('+lab+')</p>';
+  if(!rows.length)return h+'<p class="note">'+tr('Tidak ada item.','No items.')+'</p>';
+  h+='<table class="tgp"><thead><tr><th>Item</th><th>'+th2('Uraian','Description')+'</th><th>Area</th><th class="num">'+th2('Bobot','Weight')+'</th><th class="num">'+th2('Posisi awal %','Start %')+'</th><th class="num plan-c">Plan %</th><th class="num">Target %</th><th class="num">'+th2('Naik','Increase')+'</th><th class="num">'+th2('Selisih %','Variance %')+'</th></tr></thead><tbody>';
+  const byBill={};for(const it of P.its)(byBill[it.b]||(byBill[it.b]=[])).push(it);
   let lb=null,ls=null;
   for(const r of rows){const it=r.it;
-    if(it.b!==lb){const o=tot[it.b];h+='<tr class="tgb"><td colspan="9">'+esc(it.b)+'</td><td class="num plan-c">'+pp3(o.wp)+'</td><td class="num">'+pp3(o.wt)+'</td><td class="num">'+sg(o.wt-o.wp,pp3)+'</td></tr>';lb=it.b;ls=null}
-    if(it.s!==ls&&it.s){h+='<tr><td colspan="12"><i>'+esc(it.s)+'</i></td></tr>';ls=it.s}
-    h+='<tr><td>'+esc(it.c)+'</td><td>'+esc(it.d)+(it.u?' <small style="color:var(--muted)">('+esc(it.u)+')</small>':'')+'</td><td>'+esc(it.a)+'</td><td class="num">'+pp3(it.w)+'</td><td class="num">'+pp(r.f)+'</td><td class="num plan-c">'+pp(r.pl)+'</td><td class="num">'+pp(r.v)+'</td><td class="num">'+nk(r.v-r.f)+'</td><td class="num">'+sg(r.x)+'</td><td class="num plan-c">'+pp3(r.wp)+'</td><td class="num">'+pp3(r.wt)+'</td><td class="num">'+sg(r.wt-r.wp,pp3)+'</td></tr>'}
-  return h+'<tr class="tgb"><td colspan="9">TOTAL</td><td class="num plan-c">'+pp3(all.wp)+'</td><td class="num">'+pp3(all.wt)+'</td><td class="num">'+sg(all.wt-all.wp,pp3)+'</td></tr></tbody></table>';
+    if(it.b!==lb){const o=agg(byBill[it.b]);h+='<tr class="tgb"><td colspan="3">'+esc(it.b)+'</td>'+cells(o,o.W||1)+'</tr>';lb=it.b;ls=null}
+    if(it.s!==ls&&it.s){h+='<tr><td colspan="9"><i>'+esc(it.s)+'</i></td></tr>';ls=it.s}
+    h+='<tr><td>'+esc(it.c)+'</td><td>'+esc(it.d)+(it.u?' <small style="color:var(--muted)">('+esc(it.u)+')</small>':'')+'</td><td>'+esc(it.a)+'</td><td class="num">'+pp3(it.w)+'</td><td class="num">'+pp(r.f)+'</td><td class="num plan-c">'+pp(r.pl)+'</td><td class="num">'+pp(r.v)+'</td><td class="num">'+nk(r.v-r.f)+'</td><td class="num">'+sg(r.x)+'</td></tr>'}
+  const o=agg(P.its);
+  return h+'<tr class="tgb"><td colspan="3">TOTAL</td>'+cells(o,P.tot)+'</tr></tbody></table><p class="note">'+tr('Baris bill dan TOTAL menunjukkan progress terbobot seluruh item di bill atau proyek, termasuk item yang tidak tampil.','Bill and TOTAL rows show the weighted progress of all items in the bill or project, including items not listed.')+'</p>';
 }
 function tgPrint(){if(tgPS==='all'){const A=tgAnch().filter(w=>w>P.cur);if(A.length)return A.map(w=>tgPrintWeek(w,tgSolve(w))).join('')}
   return TGS&&TGS.T!=null?tgPrintWeek(tgSel,TGS):''}
@@ -950,7 +961,7 @@ document.addEventListener('click',e=>{
     case 's-sync':pull(true);return;
     case 'r-print':case 'la-print':case 'pg-print':window.print();return;
     case 'pg-up':$('f-xlsx').click();return;
-    case 'tg-print':$('tg-pbox').innerHTML=tgPrint();window.print();return;
+    case 'tg-print':{LG=cfg.pdfLang||'both';NL=LG==='en'?'en-US':'id-ID';$('tg-sum').innerHTML=tgSum();$('tg-pbox').innerHTML=tgPrint();LG='id';NL='id-ID';window.print();$('tg-sum').innerHTML=tgSum();return}
     case 'tg-clear':tgClear=true;break;case 'tg-clear-no':tgClear=false;break;
     case 'tg-clear-yes':tg[discF||'all']={a:{},o:{}};tgClear=false;saveState();break;
     case 'pg-bulk':{const v=num(($('pg-bulkv')||{}).value);if(v==null)return;pgBulk=Math.max(0,Math.min(100,v));break}
@@ -979,6 +990,7 @@ document.addEventListener('change',e=>{
   if(el.id==='tg-all'){tgAll=el.checked;render();return}
   if(el.id==='tg-ps'){tgPS=el.value;return}
   if(el.id==='tg-pi'){tgPI=el.value;return}
+  if(el.id==='tg-lang'){cfg.pdfLang=el.value;sv(K.cfg,cfg);return}
   if(el.id==='pg-w'){pgW=+el.value;pgBulk=null;render();return}
   if(el.id==='pg-catch'){cfg.pgCatch=+el.value;sv(K.cfg,cfg);render();return}
   if(el.id==='pg-q'){pgQ=el.value;render();return}
